@@ -1,0 +1,18 @@
+# Einfaches Compose-Setup für M0 — läuft, ohne vorzugreifen.
+# Härtung (Nicht-Root, restart:, HEALTHCHECK, Speicherlimit, konfigurierbarer Host-Port über
+# HOMEKANBAN_PORT) ist Aufgabe von M6 (docs/PLAN.md §9).
+services:
+  homekanban:
+    build:
+      context: ..
+      dockerfile: ops/Dockerfile
+    env_file:
+      - path: ../.env
+        required: false
+    ports:
+      - "8181:8181"
+    volumes:
+      - homekanban-data:/data
+
+volumes:
+  homekanban-data:

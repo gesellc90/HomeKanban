@@ -4,7 +4,7 @@ Detailplanung auf Basis von [`PROJEKT-PROMPT.md`](PROJEKT-PROMPT.md). Diese Date
 verbindliche Referenz für Architektur, Datenmodell und Meilensteine. Weicht die Umsetzung ab, wird
 sie im selben Pull Request nachgezogen.
 
-**Stand:** Planung abgeschlossen, keine Implementierung begonnen.
+**Stand:** M0 (Fundament & Entscheidungen) umgesetzt. M1 (Domänenmodell & Persistenz) offen.
 
 ---
 
@@ -417,6 +417,8 @@ neue Adresse, wären sonst alle geklebten Etiketten Altpapier.
 Jeder Meilenstein ist ein Pull Request, ist einzeln nutzbar und lässt sich vorführen.
 
 ### M0 — Fundament und Entscheidungen
+
+**Status:** erledigt.
 
 **Ziel:** Ein startbarer, leerer Dienst im Container, mit funktionierender Werkzeugkette.
 **Drin:** Projektstruktur nach §2, `pyproject.toml`, `ruff` (Format + Lint), `pytest`, `mypy` nur
