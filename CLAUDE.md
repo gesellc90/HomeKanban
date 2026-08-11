@@ -52,7 +52,13 @@ Rate nicht bei Entscheidungen, die dem Nutzer gehören.
   Ausreichend → `ok`, Nachkaufen → `reorder`, Auf Liste → `on_list`, Archivieren → `archive`,
   Reaktivieren → `reactivate`, Scan/Entnahmeseite → `scan`, Zweitschlüssel gegen Doppelbuchung →
   `idempotency_key`, Zeitfenster fürs Rückgängigmachen → `undo_window` (Konfiguration:
-  `undo_window_minutes`).
+  `undo_window_minutes`), Abgleich der Einkaufsliste → `reconciliation` (Funktion:
+  `plan_reconciliation`), Position auf der Liste → `line` (`shopping_list_lines`), abgehakt →
+  `checked` (Zeitpunkt: `checked_at`), verworfen/von der Liste genommen → `dropped`
+  (`dropped_at`), vorgeschlagene Kaufmenge → `suggested_qty`, tatsächlich gekaufte Menge →
+  `purchased_qty`, Kopie von Name und Einheit zum Erzeugungszeitpunkt → `snapshot`
+  (`name_snapshot`, `unit_snapshot`), Einkauf abschließen → `complete`, Pluralform einer
+  Einheit → `plural_unit`.
   Erweitere das Glossar, wenn ein neuer Begriff dazukommt.
 
 ## 3. Gesetzte Entscheidungen

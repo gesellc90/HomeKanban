@@ -3,8 +3,10 @@
 Kanban-Verwaltung für Alltagsverbrauchsmittel im Haushalt — läuft im Heimnetz auf einem
 Raspberry Pi, parallel zur bestehenden Web-App „Hängt! – jeder Strich zählt“.
 
-> **Status: M0–M3 umgesetzt (Fundament, Domänenmodell & Persistenz, Board & Artikelpflege,
-> QR-Entnahme-Flow).**
+> **Status: M0–M4 umgesetzt (Fundament, Domänenmodell & Persistenz, Board & Artikelpflege,
+> QR-Entnahme-Flow, Einkaufsliste & Apple-Notes-Export).** Bei M4 steht ein Punkt noch aus: Der
+> iOS-Kurzbefehl ist noch nicht auf dem iPhone durchgeführt worden — Anleitung dazu in
+> [`docs/KURZBEFEHL.md`](docs/KURZBEFEHL.md).
 > Anforderungen und Rahmen: [`docs/PROJEKT-PROMPT.md`](docs/PROJEKT-PROMPT.md).
 > Architektur, Datenmodell, Meilensteine, Risiken: [`docs/PLAN.md`](docs/PLAN.md).
 
@@ -40,7 +42,7 @@ abhakbare Checkliste in Apple Notes holt.
 | M1 | Domänenmodell & Persistenz | erledigt |
 | M2 | Kanban-Board & Artikelpflege | erledigt |
 | M3 | QR-Entnahme-Flow | erledigt |
-| M4 | Einkaufsliste & Apple-Notes-Export | offen |
+| M4 | Einkaufsliste & Apple-Notes-Export | erledigt — iPhone-Verifikation des Kurzbefehls steht aus |
 | M5 | Etiketten (Einzel-QR + PDF-Bögen) | offen |
 | M6 | Deployment auf dem Raspberry Pi | offen |
 | M7 | Kategorien & Ladenzuordnung | offen |
@@ -91,7 +93,7 @@ CLAUDE.md                        Arbeitsanweisungen für Claude Code in diesem P
 Makefile                         Einstiegspunkt für alle lokalen Checks
 docs/PROJEKT-PROMPT.md           Anforderungen, Technologie-Rahmen, Meilensteine
 docs/PLAN.md                     Detailplanung: Architektur, Datenmodell, Risiken, Szenarien
-docs/KURZBEFEHL.md               Anleitung für den iOS-Kurzbefehl (entsteht in M4)
+docs/KURZBEFEHL.md               Anleitung für den iOS-Kurzbefehl (Apple Notes / Erinnerungen)
 docs/adr/                        Architekturentscheidungen, je eine Datei
 .githooks/                       versionierte Git-Hooks (pre-commit, pre-push)
 .github/                         PR- und Issue-Vorlagen (keine Workflows)
