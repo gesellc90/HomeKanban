@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Virtuelle Umgebungen
+.venv/
+venv/
+env/
+
+# Werkzeug-Caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Konfiguration und Geheimnisse (niemals einchecken)
+.env
+.env.*
+!.env.example
+
+# Laufzeitdaten: SQLite-Datenbank, Backups, generierte Etiketten
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+backups/
+labels-out/
+
+# Editor / Betriebssystem
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
