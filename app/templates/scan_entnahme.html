@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}{{ item.name }} entnehmen – HomeKanban{% endblock %}
+{% block content %}
+  <h1>{{ item.name }}</h1>
+  <p class="badge badge--{{ status.value }}">{{ status|status_label }}</p>
+
+  <p class="item-stock">
+    Bestand: <strong>{{ item.stock }} {{ item.unit }}</strong>
+    (Mindestbestand {{ item.reorder_level }})
+  </p>
+
+  {% if reorder_qty is not none %}
+    <p class="item-reorder-hint">Nachkaufmenge: {{ reorder_qty }} {{ item.unit }}</p>
+  {% endif %}
+
+  {% if error %}
+    <ul class="form-errors">
+      <li>{{ error }}</li>
+    </ul>
+  {% endif %}
+
+  <form method="post" action="/e/{{ item.qr_token }}/entnahme" class="scan-form">
+    <input type="hidden" name="quantity" value="1" />
+    <input type="hidden" name="idempotency_key" value="{{ quick_idempotency_key }}" />
+    <button type="submit" class="button button--primary button--scan-primary">
+      −1 entnommen
+    </button>
+  </form>
+
+  <form method="post" action="/e/{{ item.qr_token }}/entnahme" class="scan-form scan-form--step">
+    <label for="quantity">Andere Menge</label>
+    <input id="quantity" name="quantity" type="number" min="1" step="1" value="1" />
+    <input type="hidden" name="idempotency_key" value="{{ step_idempotency_key }}" />
+    <button type="submit" class="button">Entnehmen</button>
+  </form>
+
+  <section class="scan-correction">
+    <h2 class="scan-correction__heading">Bestand korrigieren</h2>
+    <p class="scan-correction__hint">
+      Vergessener Scan, falsch gebucht oder spontan mitgebracht? Hier den tatsächlichen Bestand
+      eintragen.
+    </p>
+    <form method="post" action="/artikel/{{ item.id }}/inventur" class="item-form">
+      <input type="hidden" name="expected_stock" value="{{ item.stock }}" />
+      <label for="actual_stock">Tatsächlicher Bestand</label>
+      <input
+        id="actual_stock"
+        name="actual_stock"
+        type="number"
+        min="0"
+        step="1"
+        required
+        value="{{ item.stock }}"
+      />
+      <button type="submit" class="button">Bestand speichern</button>
+    </form>
+  </section>
+{% endblock %}

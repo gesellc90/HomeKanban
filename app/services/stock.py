@@ -15,6 +15,7 @@ import sqlite3
 from datetime import UTC, datetime
 
 from app.db import transaction
+from app.domain.undo import is_within_undo_window
 from app.repo import items as items_repo
 from app.repo import movements as movements_repo
 
@@ -29,6 +30,13 @@ class MovementNotFoundError(Exception):
 
 class AlreadyRevertedError(Exception):
     """Diese Bewegung wurde bereits rückgängig gemacht."""
+
+
+class UndoWindowExpiredError(Exception):
+    """Das Rückgängig-Fenster (`undo_window_minutes`, §5) ist für diese Bewegung abgelaufen.
+
+    Der Korrekturweg ab jetzt ist die Inventur (`apply_inventory`), keine Gegenbewegung mehr.
+    """
 
 
 class StaleInventoryError(Exception):
@@ -118,26 +126,53 @@ def withdraw(
     idempotency_key: str | None = None,
     note: str | None = None,
 ) -> int:
-    """Bucht eine Entnahme. `quantity` ist die entnommene Menge (positive Zahl)."""
+    """Bucht eine Entnahme. `quantity` ist die entnommene Menge (positive Zahl).
+
+    Idempotenz (§5): Ein zweites Absenden mit demselben `idempotency_key` — Reload,
+    Zurück-Button, hektisches Doppeltippen, zwei Personen gleichzeitig (R7) — bucht nicht noch
+    einmal, sondern liefert die ID der bereits vorhandenen Bewegung zurück.
+
+    Zwei Wege dorthin sind nötig, kein einzelner genügt:
+    1. Der Vorab-`SELECT` erspart im Normalfall (Reload, Zurück-Button) den zweiten Schreib-
+       versuch überhaupt.
+    2. Er allein schließt die Race Condition aber nicht aus: Zwei gleichzeitige Aufrufe mit
+       demselben Schlüssel können beide den Vorab-`SELECT` mit demselben "noch nicht vorhanden"
+       durchlaufen, bevor der erste committet hat (klassisches TOCTOU). Der Unique-Index auf
+       `movements.idempotency_key` ist deshalb die eigentliche Garantie: Der zweite `INSERT`
+       schlägt mit `IntegrityError` fehl, und erst dann liefert ein erneuter `SELECT` zuverlässig
+       die vom ersten Aufruf geschriebene Bewegung.
+    """
     if quantity <= 0:
         raise ValueError("Entnahmemenge muss größer als 0 sein")
 
-    with transaction(connection):
-        item = _require_item(connection, item_id)
-        new_stock = item.stock - quantity
-        now = utc_now_iso()
-        movement_id = movements_repo.insert(
-            connection,
-            item_id=item_id,
-            kind="withdrawal",
-            delta=-quantity,
-            stock_after=new_stock,
-            source=source,
-            idempotency_key=idempotency_key,
-            note=note,
-            created_at=now,
-        )
-        items_repo.update_stock(connection, item_id, new_stock, now)
+    if idempotency_key is not None:
+        existing = movements_repo.get_by_idempotency_key(connection, idempotency_key)
+        if existing is not None:
+            return existing.id
+
+    try:
+        with transaction(connection):
+            item = _require_item(connection, item_id)
+            new_stock = item.stock - quantity
+            now = utc_now_iso()
+            movement_id = movements_repo.insert(
+                connection,
+                item_id=item_id,
+                kind="withdrawal",
+                delta=-quantity,
+                stock_after=new_stock,
+                source=source,
+                idempotency_key=idempotency_key,
+                note=note,
+                created_at=now,
+            )
+            items_repo.update_stock(connection, item_id, new_stock, now)
+    except sqlite3.IntegrityError:
+        if idempotency_key is not None:
+            existing = movements_repo.get_by_idempotency_key(connection, idempotency_key)
+            if existing is not None:
+                return existing.id
+        raise
     return movement_id
 
 
@@ -213,14 +248,28 @@ def apply_inventory(
     return movement_id
 
 
-def undo(connection: sqlite3.Connection, *, movement_id: int, source: str) -> int:
-    """Bucht eine ausgleichende Gegenbewegung zu `movement_id` (L3) — kein DELETE."""
+def undo(
+    connection: sqlite3.Connection, *, movement_id: int, source: str, window_minutes: int
+) -> int:
+    """Bucht eine ausgleichende Gegenbewegung zu `movement_id` (L3) — kein DELETE.
+
+    Nur innerhalb von `window_minutes` seit der Bewegung erlaubt (§5); danach ist die Inventur
+    der Korrekturweg, siehe `UndoWindowExpiredError`.
+    """
     with transaction(connection):
         movement = movements_repo.get_by_id(connection, movement_id)
         if movement is None:
             raise MovementNotFoundError(f"Bewegung {movement_id} existiert nicht")
         if movements_repo.find_reversal(connection, movement_id) is not None:
             raise AlreadyRevertedError(f"Bewegung {movement_id} wurde bereits rückgängig gemacht")
+
+        created_at = datetime.fromisoformat(movement.created_at.replace("Z", "+00:00"))
+        if not is_within_undo_window(
+            created_at=created_at, now=datetime.now(UTC), window_minutes=window_minutes
+        ):
+            raise UndoWindowExpiredError(
+                f"Bewegung {movement_id} liegt außerhalb des {window_minutes}-Minuten-Fensters"
+            )
 
         item = _require_item(connection, movement.item_id)
         new_stock = item.stock - movement.delta

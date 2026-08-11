@@ -28,6 +28,21 @@
     {% if reorder_qty is not none %}
       <p class="item-reorder-hint">Nachkaufmenge: {{ reorder_qty }} {{ item.unit }}</p>
     {% endif %}
+
+    <section class="scan-link">
+      <h2>Entnahme-Link</h2>
+      <p class="scan-link__hint">
+        Zum Testen ohne Etikett — der Einzel-QR-Code kommt erst in M5.
+      </p>
+      <a class="scan-link__url" href="{{ scan_url }}">{{ scan_url }}</a>
+      <input
+        type="text"
+        readonly
+        value="{{ scan_url }}"
+        class="scan-link__input"
+        aria-label="Entnahme-Link zum Kopieren"
+      />
+    </section>
   {% endif %}
 
   {% if item.note %}

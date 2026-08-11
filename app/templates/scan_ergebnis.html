@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Gebucht: {{ item.name }} – HomeKanban{% endblock %}
+{% block content %}
+  <h1>{{ item.name }}</h1>
+  <p class="badge badge--{{ status.value }}">{{ status|status_label }}</p>
+
+  <p class="item-stock">
+    Bestand: <strong>{{ item.stock }} {{ item.unit }}</strong>
+  </p>
+
+  <p class="scan-result__summary">
+    {{ "%+d"|format(movement.delta) }} {{ item.unit }} gebucht ({{ movement.created_at|local_time }})
+  </p>
+
+  {% if reorder_qty is not none %}
+    <p class="item-reorder-hint">Steht auf der nächsten Einkaufsliste.</p>
+  {% endif %}
+
+  {% if undo_error %}
+    <ul class="form-errors">
+      <li>{{ undo_error }}</li>
+    </ul>
+  {% endif %}
+
+  {% if already_reverted %}
+    <p class="scan-result__reverted">Diese Buchung wurde bereits rückgängig gemacht.</p>
+  {% elif can_undo %}
+    <form method="post" action="/bewegungen/{{ movement.id }}/rueckgaengig" class="inline-form">
+      <button type="submit" class="button button--danger">Rückgängig</button>
+    </form>
+  {% else %}
+    <p class="scan-result__hint">
+      Das Zeitfenster zum Rückgängigmachen ist abgelaufen. Für Korrekturen:
+      <a href="{{ scan_href }}">Bestand korrigieren</a>.
+    </p>
+  {% endif %}
+
+  <a class="back-link" href="{{ scan_href }}">← Zurück zur Entnahmeseite</a>
+{% endblock %}

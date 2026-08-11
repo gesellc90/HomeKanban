@@ -80,6 +80,15 @@ def get_by_id(connection: sqlite3.Connection, movement_id: int) -> MovementRow |
     return _row_to_movement(row) if row is not None else None
 
 
+def get_by_idempotency_key(
+    connection: sqlite3.Connection, idempotency_key: str
+) -> MovementRow | None:
+    row = connection.execute(
+        "SELECT * FROM movements WHERE idempotency_key = ?", (idempotency_key,)
+    ).fetchone()
+    return _row_to_movement(row) if row is not None else None
+
+
 def find_reversal(connection: sqlite3.Connection, movement_id: int) -> MovementRow | None:
     """Die Gegenbewegung zu `movement_id`, falls sie schon rückgängig gemacht wurde."""
     row = connection.execute(

@@ -5,7 +5,7 @@ verbindliche Referenz für Architektur, Datenmodell und Meilensteine. Weicht die
 sie im selben Pull Request nachgezogen.
 
 **Stand:** M0 (Fundament & Entscheidungen) umgesetzt. M1 (Domänenmodell & Persistenz) umgesetzt.
-M2 (Board & Artikelpflege) umgesetzt.
+M2 (Board & Artikelpflege) umgesetzt. M3 (QR-Entnahme-Flow) umgesetzt.
 
 ---
 
@@ -468,6 +468,8 @@ verständlich deutsch gemeldet.
 **Artefakte:** bedienbare Oberfläche, ab hier lässt sich der Vorrat pflegen.
 
 ### M3 — QR-Entnahme-Flow
+
+**Status:** erledigt.
 
 **Ziel:** Scannen und Buchen im Alltag, sicher gegen Fehlbedienung.
 **Drin:** Tokenvergabe beim Anlegen, `/e/{token}`, Buchung per POST mit Idempotenzschlüssel,

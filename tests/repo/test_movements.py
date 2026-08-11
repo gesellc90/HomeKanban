@@ -60,6 +60,34 @@ def test_list_for_item_returns_newest_first_and_respects_limit(
     assert [m.kind for m in movements] == ["restock", "withdrawal"]
 
 
+def test_get_by_idempotency_key_finds_the_matching_movement(
+    connection: sqlite3.Connection,
+) -> None:
+    item_id = stock.create_item(
+        connection,
+        name="Kaffee",
+        unit="Packung",
+        stock=3,
+        reorder_level=1,
+        target_stock=5,
+        position=0,
+    )
+    movement_id = stock.withdraw(
+        connection, item_id=item_id, quantity=1, source="qr", idempotency_key="scan-1"
+    )
+
+    found = movements_repo.get_by_idempotency_key(connection, "scan-1")
+
+    assert found is not None
+    assert found.id == movement_id
+
+
+def test_get_by_idempotency_key_returns_none_when_unknown(
+    connection: sqlite3.Connection,
+) -> None:
+    assert movements_repo.get_by_idempotency_key(connection, "unbekannt") is None
+
+
 def test_list_for_item_only_returns_movements_for_that_item(
     connection: sqlite3.Connection,
 ) -> None:
