@@ -48,8 +48,11 @@ abhakbare Checkliste in Apple Notes holt.
 
 Umfang, Definition of Done und Testfokus je Meilenstein: [`docs/PLAN.md`](docs/PLAN.md) §9.
 
-**Vor dem Etikettendruck (M5) zu klären:** welchen Port „Hängt!“ belegt und ob ein Reverse Proxy
-davor liegt — die Basis-URL steckt in jedem gedruckten QR-Code. Siehe `docs/PLAN.md` §10, O2.
+**Pi-Zugriff:** `192.168.0.15` im Heimnetz, aktuell ohne Reverse Proxy vor „Hängt!“ (ein Proxy ist
+dort vorgesehen und könnte später ergänzt werden, siehe `docs/PLAN.md` §10, O2). HomeKanban wird
+trotzdem über einen mDNS-Hostnamen statt der festen IP angesprochen, damit die gedruckten
+QR-Etiketten einen Hardware- oder Adresswechsel überleben — Portwahl und genauer Hostname werden
+in M6 geprüft.
 
 ## Tests laufen lokal — nicht in der Cloud
 

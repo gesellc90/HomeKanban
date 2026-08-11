@@ -579,9 +579,23 @@ Richtige, Import lehnt kaputte Dateien ab, ohne bestehende Daten anzufassen.
 | # | Frage | Empfehlung |
 | --- | --- | --- |
 | O1 | Wenn du mit der Notiz im Laden abhakst — soll die App danach nur „Alles gekauft“ anbieten, oder willst du wirklich Position für Position bestätigen? | „Alles gekauft“ als großer Standardweg, Einzelabhaken für Abweichungen. Sonst ist der Heimweg zu teuer (R2). |
-| O2 | Welchen Port belegt „Hängt!“, und läuft davor ein Reverse Proxy? | Vor M5 klären — die Antwort steht in jedem gedruckten QR-Code (A1, A2, R6). |
 | O3 | Soll `HOMEKANBAN_LEAD_DAYS` global gelten oder pro Artikel? Klopapier hat eine andere Vorlaufzeit als Kaffee. | Erst global mit 7 Tagen; pro Artikel nur, wenn M8 zeigt, dass es nötig ist. |
 | O4 | Wer soll Artikel anlegen dürfen — alle im Haushalt oder nur du? | Alle. Ohne Login ist die Alternative ohnehin nur eine Bitte, und Archivieren ist reversibel. |
+
+**O2 — beantwortet:** Der Pi ist im Heimnetz unter der festen Adresse `192.168.0.15` erreichbar;
+„Hängt!“ läuft aktuell **ohne** Reverse Proxy davor, ein Proxy ist im Projekt „Hängt!“ aber
+vorgesehen und könnte später ergänzt werden. Damit ist A2 bestätigt: HomeKanban wird direkt über
+`http://<host>:<port>` angesprochen, ohne Pfad- oder Subdomain-Präfix. Zwei Punkte bleiben in
+M6 zu erledigen, unverändert zum bisherigen Plan:
+
+- Mit `ss -ltnp` auf dem Pi prüfen, welcher Port von „Hängt!“ belegt ist, und `HOMEKANBAN_PORT`
+  entsprechend frei wählen (A1) — der genaue Port von „Hängt!“ selbst ist ohne Belang, da
+  HomeKanban einen eigenen Container mit eigenem Port bekommt.
+- `HOMEKANBAN_BASE_URL` auf den mDNS-Hostnamen setzen (z. B. `raspberrypi.local`), **nicht** auf
+  `192.168.0.15`. Reserviert der Router die IP nicht per DHCP fest, überlebt eine feste IP im
+  QR-Code einen Neustart des Pi zwar, einen Tausch der Hardware aber nicht — der Hostname übersteht
+  beides. Falls „Hängt!“ perspektivisch einen Reverse Proxy bekommt, ändert das nichts an
+  HomeKanban, solange dessen eigener Port und Hostname unberührt bleiben (siehe R6).
 
 ---
 
