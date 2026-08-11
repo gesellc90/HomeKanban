@@ -50,7 +50,9 @@ Rate nicht bei Entscheidungen, die dem Nutzer gehören.
   `shopping_list`, Laden → `store`, Inventur → `inventory` (fachlicher Vorgang; die dabei
   geschriebene Bewegung bleibt vom `kind` her eine `adjustment`), Rückgängig → `undo`,
   Ausreichend → `ok`, Nachkaufen → `reorder`, Auf Liste → `on_list`, Archivieren → `archive`,
-  Reaktivieren → `reactivate`.
+  Reaktivieren → `reactivate`, Scan/Entnahmeseite → `scan`, Zweitschlüssel gegen Doppelbuchung →
+  `idempotency_key`, Zeitfenster fürs Rückgängigmachen → `undo_window` (Konfiguration:
+  `undo_window_minutes`).
   Erweitere das Glossar, wenn ein neuer Begriff dazukommt.
 
 ## 3. Gesetzte Entscheidungen

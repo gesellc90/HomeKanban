@@ -175,6 +175,8 @@ def _render_detail(
         else None
     )
 
+    base_url = request.app.state.settings.base_url.rstrip("/")
+
     context: dict[str, Any] = {
         "item": item,
         "status": item_status,
@@ -187,6 +189,9 @@ def _render_detail(
         "form_errors": errors.form_errors,
         "inventory_errors": errors.inventory_errors,
         "reactivate_errors": errors.reactivate_errors,
+        # Entnahme-Link zum Testen ohne Etikett — der Einzel-QR selbst kommt erst in M5
+        # (docs/PLAN.md §9, M3, Punkt 6).
+        "scan_url": f"{base_url}/e/{item.qr_token}",
     }
     return templates.TemplateResponse(request, "item_detail.html", context, status_code=status_code)
 

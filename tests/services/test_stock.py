@@ -2,12 +2,33 @@ from __future__ import annotations
 
 import random
 import sqlite3
+import tempfile
+import threading
+from datetime import datetime, timedelta
+from pathlib import Path
 
 import pytest
 
+from app.db import connect
+from app.migrate import migrate
 from app.repo import items as items_repo
 from app.repo import movements as movements_repo
 from app.services import stock
+
+MIGRATIONS_DIR = Path(__file__).resolve().parent.parent.parent / "migrations"
+
+
+def _shift_created_at(
+    connection: sqlite3.Connection, movement_id: int, *, delta: timedelta
+) -> None:
+    """Verschiebt `created_at` einer Bewegung, um Fensterablauf zu simulieren, ohne echte Zeit
+    verstreichen zu lassen."""
+    movement = movements_repo.get_by_id(connection, movement_id)
+    assert movement is not None
+    original = datetime.fromisoformat(movement.created_at.replace("Z", "+00:00"))
+    shifted = original + delta
+    stamp = shifted.strftime("%Y-%m-%dT%H:%M:%S.") + f"{shifted.microsecond // 1000:03d}Z"
+    connection.execute("UPDATE movements SET created_at = ? WHERE id = ?", (stamp, movement_id))
 
 
 def _create_item(
@@ -184,7 +205,9 @@ class TestUndo:
         item_id = _create_item(connection, initial_stock=5)
         movement_id = stock.withdraw(connection, item_id=item_id, quantity=2, source="qr")
 
-        reversal_id = stock.undo(connection, movement_id=movement_id, source="qr")
+        reversal_id = stock.undo(
+            connection, movement_id=movement_id, source="qr", window_minutes=10
+        )
 
         item = items_repo.get_by_id(connection, item_id)
         assert item is not None
@@ -199,7 +222,7 @@ class TestUndo:
         item_id = _create_item(connection, initial_stock=1, reorder_level=1, target_stock=10)
         movement_id = stock.restock(connection, item_id=item_id, quantity=5, source="board")
 
-        stock.undo(connection, movement_id=movement_id, source="board")
+        stock.undo(connection, movement_id=movement_id, source="board", window_minutes=10)
 
         item = items_repo.get_by_id(connection, item_id)
         assert item is not None
@@ -208,10 +231,10 @@ class TestUndo:
     def test_double_undo_is_rejected(self, connection: sqlite3.Connection) -> None:
         item_id = _create_item(connection, initial_stock=5)
         movement_id = stock.withdraw(connection, item_id=item_id, quantity=2, source="qr")
-        stock.undo(connection, movement_id=movement_id, source="qr")
+        stock.undo(connection, movement_id=movement_id, source="qr", window_minutes=10)
 
         with pytest.raises(stock.AlreadyRevertedError):
-            stock.undo(connection, movement_id=movement_id, source="qr")
+            stock.undo(connection, movement_id=movement_id, source="qr", window_minutes=10)
 
         item = items_repo.get_by_id(connection, item_id)
         assert item is not None
@@ -219,7 +242,145 @@ class TestUndo:
 
     def test_undo_unknown_movement_raises(self, connection: sqlite3.Connection) -> None:
         with pytest.raises(stock.MovementNotFoundError):
-            stock.undo(connection, movement_id=999_999, source="qr")
+            stock.undo(connection, movement_id=999_999, source="qr", window_minutes=10)
+
+
+class TestUndoWindow:
+    def test_undo_within_window_succeeds(self, connection: sqlite3.Connection) -> None:
+        item_id = _create_item(connection, initial_stock=5)
+        movement_id = stock.withdraw(connection, item_id=item_id, quantity=2, source="qr")
+        _shift_created_at(connection, movement_id, delta=-timedelta(minutes=9, seconds=59))
+
+        stock.undo(connection, movement_id=movement_id, source="qr", window_minutes=10)
+
+        item = items_repo.get_by_id(connection, item_id)
+        assert item is not None
+        assert item.stock == 5
+
+    def test_undo_after_window_expired_is_rejected(self, connection: sqlite3.Connection) -> None:
+        item_id = _create_item(connection, initial_stock=5)
+        movement_id = stock.withdraw(connection, item_id=item_id, quantity=2, source="qr")
+        _shift_created_at(connection, movement_id, delta=-timedelta(minutes=10, seconds=1))
+
+        with pytest.raises(stock.UndoWindowExpiredError):
+            stock.undo(connection, movement_id=movement_id, source="qr", window_minutes=10)
+
+        item = items_repo.get_by_id(connection, item_id)
+        assert item is not None
+        assert item.stock == 3  # unverändert — kein stilles Rückgängig nach Ablauf
+
+
+class TestWithdrawIdempotency:
+    def test_second_call_with_same_key_returns_existing_movement_and_books_once(
+        self, connection: sqlite3.Connection
+    ) -> None:
+        item_id = _create_item(connection, initial_stock=5)
+
+        first_id = stock.withdraw(
+            connection, item_id=item_id, quantity=1, source="qr", idempotency_key="scan-1"
+        )
+        second_id = stock.withdraw(
+            connection, item_id=item_id, quantity=1, source="qr", idempotency_key="scan-1"
+        )
+
+        assert first_id == second_id
+        item = items_repo.get_by_id(connection, item_id)
+        assert item is not None
+        assert item.stock == 4  # nur einmal gebucht, nicht zweimal
+        assert _sum_delta(connection, item_id) == 4
+
+    def test_different_keys_book_independently(self, connection: sqlite3.Connection) -> None:
+        item_id = _create_item(connection, initial_stock=5)
+
+        first_id = stock.withdraw(
+            connection, item_id=item_id, quantity=1, source="qr", idempotency_key="scan-a"
+        )
+        second_id = stock.withdraw(
+            connection, item_id=item_id, quantity=1, source="qr", idempotency_key="scan-b"
+        )
+
+        assert first_id != second_id
+        item = items_repo.get_by_id(connection, item_id)
+        assert item is not None
+        assert item.stock == 3
+
+    def test_without_idempotency_key_each_call_books_separately(
+        self, connection: sqlite3.Connection
+    ) -> None:
+        item_id = _create_item(connection, initial_stock=5)
+
+        stock.withdraw(connection, item_id=item_id, quantity=1, source="qr")
+        stock.withdraw(connection, item_id=item_id, quantity=1, source="qr")
+
+        item = items_repo.get_by_id(connection, item_id)
+        assert item is not None
+        assert item.stock == 3
+
+
+class TestConcurrentWithdraw:
+    def test_two_connections_racing_the_same_idempotency_key_book_once(self) -> None:
+        """Der Fall, den ein reines Vorab-SELECT durchrutschen lässt (docs/PLAN.md §5/§11,4):
+        zwei echte, unabhängige Verbindungen buchen "gleichzeitig" mit demselben Schlüssel."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            db_path = Path(tmp_dir) / "concurrent.db"
+            setup_connection = connect(db_path)
+            migrate(setup_connection, MIGRATIONS_DIR)
+            item_id = stock.create_item(
+                setup_connection,
+                name="Testartikel",
+                unit="Packung",
+                stock=10,
+                reorder_level=1,
+                target_stock=20,
+                position=0,
+            )
+            setup_connection.close()
+
+            connection_a = connect(db_path)
+            connection_b = connect(db_path)
+            results: list[int] = []
+            errors: list[BaseException] = []
+            barrier = threading.Barrier(2)
+
+            def worker(connection: sqlite3.Connection) -> None:
+                try:
+                    barrier.wait(timeout=5)
+                    movement_id = stock.withdraw(
+                        connection,
+                        item_id=item_id,
+                        quantity=1,
+                        source="qr",
+                        idempotency_key="racing-key",
+                    )
+                    results.append(movement_id)
+                except BaseException as error:  # noqa: BLE001 - für die Testauswertung gesammelt
+                    errors.append(error)
+
+            threads = [
+                threading.Thread(target=worker, args=(connection_a,)),
+                threading.Thread(target=worker, args=(connection_b,)),
+            ]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+
+            try:
+                assert errors == []
+                assert len(results) == 2
+                assert results[0] == results[1]  # dieselbe Bewegung, kein zweiter Buchungsvorgang
+
+                check_connection = connect(db_path)
+                try:
+                    item = items_repo.get_by_id(check_connection, item_id)
+                    assert item is not None
+                    assert item.stock == 9  # genau eine Entnahme, nicht zwei
+                    assert _sum_delta(check_connection, item_id) == 9
+                finally:
+                    check_connection.close()
+            finally:
+                connection_a.close()
+                connection_b.close()
 
 
 class TestLedgerInvariant:
