@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Board – HomeKanban{% endblock %}
+{% block content %}
+  <div class="board-toolbar">
+    <a class="button button--primary" href="/artikel/neu">+ Neuer Artikel</a>
+  </div>
+
+  <div class="board">
+    <section class="board-column" aria-labelledby="col-ok">
+      <h2 id="col-ok">Ausreichend <span class="board-column__count">{{ ok_items|length }}</span></h2>
+      {% if ok_items %}
+        <ul class="item-list">
+          {% for entry in ok_items %}
+            <li>
+              <a class="item-card item-card--ok" href="/artikel/{{ entry.item.id }}">
+                <span class="item-card__name">{{ entry.item.name }}</span>
+                <span class="item-card__stock">{{ entry.item.stock }} {{ entry.item.unit }}</span>
+              </a>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="board-column__empty">Keine Artikel.</p>
+      {% endif %}
+    </section>
+
+    <section class="board-column" aria-labelledby="col-reorder">
+      <h2 id="col-reorder">Nachkaufen <span class="board-column__count">{{ reorder_items|length }}</span></h2>
+      {% if reorder_items %}
+        <ul class="item-list">
+          {% for entry in reorder_items %}
+            <li>
+              <a class="item-card item-card--reorder" href="/artikel/{{ entry.item.id }}">
+                <span class="item-card__name">{{ entry.item.name }}</span>
+                <span class="item-card__stock">{{ entry.item.stock }} {{ entry.item.unit }}</span>
+                <span class="item-card__hint">
+                  Vorschlag: {{ entry.reorder_quantity }} {{ entry.item.unit }}
+                </span>
+              </a>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="board-column__empty">Keine Artikel.</p>
+      {% endif %}
+    </section>
+
+    <section class="board-column" aria-labelledby="col-on-list">
+      <h2 id="col-on-list">Auf Liste <span class="board-column__count">{{ on_list_items|length }}</span></h2>
+      {% if on_list_items %}
+        <ul class="item-list">
+          {% for entry in on_list_items %}
+            <li>
+              <a class="item-card item-card--on-list" href="/artikel/{{ entry.item.id }}">
+                <span class="item-card__name">{{ entry.item.name }}</span>
+                <span class="item-card__stock">{{ entry.item.stock }} {{ entry.item.unit }}</span>
+              </a>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="board-column__empty">Noch leer — kommt mit der Einkaufsliste (ab M4).</p>
+      {% endif %}
+    </section>
+  </div>
+{% endblock %}

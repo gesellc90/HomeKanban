@@ -5,6 +5,7 @@ verbindliche Referenz für Architektur, Datenmodell und Meilensteine. Weicht die
 sie im selben Pull Request nachgezogen.
 
 **Stand:** M0 (Fundament & Entscheidungen) umgesetzt. M1 (Domänenmodell & Persistenz) umgesetzt.
+M2 (Board & Artikelpflege) umgesetzt.
 
 ---
 
@@ -94,6 +95,7 @@ app/
   domain/
     quantities.py         Rundung auf Kaufeinheit, Nachkaufmenge
     status.py             Statusableitung (OK / Nachkaufen / Auf Liste)
+    validation.py         Prüfregeln für Artikelstammdaten, deutsche Meldungen   (M2)
     forecast.py           Verbrauchsrate, Reichweite, Schwellenvorschlag   (M8)
   repo/
     items.py  movements.py  shopping_lists.py  taxonomy.py
@@ -450,6 +452,8 @@ Inventur mit veraltetem `expected_stock`, Gegenbuchung, `CHECK`-Verletzungen.
 **Artefakte:** Schema, getestete Domänenschicht.
 
 ### M2 — Board und Artikelpflege
+
+**Status:** erledigt.
 
 **Ziel:** Der Haushalt ist im Browser erfassbar und sichtbar.
 **Drin:** Board mit drei abgeleiteten Spalten, Anlegen/Ändern/Archivieren, Inventur aus der

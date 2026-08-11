@@ -118,3 +118,42 @@ def archive(connection: sqlite3.Connection, item_id: int, archived_at: str) -> N
         "UPDATE items SET archived_at = ?, updated_at = ? WHERE id = ?",
         (archived_at, archived_at, item_id),
     )
+
+
+def reactivate(connection: sqlite3.Connection, item_id: int, updated_at: str) -> None:
+    connection.execute(
+        "UPDATE items SET archived_at = NULL, updated_at = ? WHERE id = ?",
+        (updated_at, item_id),
+    )
+
+
+def update(
+    connection: sqlite3.Connection,
+    item_id: int,
+    *,
+    name: str,
+    unit: str,
+    note: str | None,
+    reorder_level: int,
+    target_stock: int,
+    pack_size: int,
+    updated_at: str,
+) -> None:
+    """Ändert Stammdaten. `stock` ist absichtlich nicht dabei — Bestand ändert sich nur über
+    das Bewegungsjournal (siehe app/services/stock.py), nie über ein direktes Stammdaten-Update.
+    """
+    connection.execute(
+        """
+        UPDATE items
+        SET name = ?, unit = ?, note = ?, reorder_level = ?, target_stock = ?, pack_size = ?,
+            updated_at = ?
+        WHERE id = ?
+        """,
+        (name, unit, note, reorder_level, target_stock, pack_size, updated_at, item_id),
+    )
+
+
+def next_position(connection: sqlite3.Connection) -> int:
+    """Nächste freie Position für einen neuen Artikel (über alle Artikel, auch archivierte)."""
+    row = connection.execute("SELECT COALESCE(MAX(position), -1) + 1 AS next_position FROM items")
+    return int(row.fetchone()["next_position"])
