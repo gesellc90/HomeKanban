@@ -4,7 +4,7 @@ Detailplanung auf Basis von [`PROJEKT-PROMPT.md`](PROJEKT-PROMPT.md). Diese Date
 verbindliche Referenz für Architektur, Datenmodell und Meilensteine. Weicht die Umsetzung ab, wird
 sie im selben Pull Request nachgezogen.
 
-**Stand:** M0 (Fundament & Entscheidungen) umgesetzt. M1 (Domänenmodell & Persistenz) offen.
+**Stand:** M0 (Fundament & Entscheidungen) umgesetzt. M1 (Domänenmodell & Persistenz) umgesetzt.
 
 ---
 
@@ -434,6 +434,8 @@ einen echten Test.
 **Artefakte:** lauffähiges Skelett, `docs/adr/0001`–`0004`.
 
 ### M1 — Domänenmodell und Persistenz
+
+**Status:** erledigt.
 
 **Ziel:** Die Rechenregeln des Haushalts stehen und sind bewiesen — ohne Oberfläche.
 **Drin:** `0001_init.sql` mit allen sieben Tabellen aus §3 (inklusive `category_id`/`store_id`),
