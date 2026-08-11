@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% block title %}{{ item.name }} – HomeKanban{% endblock %}
+{% block content %}
+  <a class="back-link" href="/">← Zurück zum Board</a>
+
+  <h1>{{ item.name }}</h1>
+
+  {% if item.archived_at %}
+    <p class="badge badge--archived">Archiviert am {{ item.archived_at|local_time }}</p>
+
+    {% if reactivate_errors %}
+      <ul class="form-errors">
+        {% for error in reactivate_errors %}<li>{{ error }}</li>{% endfor %}
+      </ul>
+    {% endif %}
+    <form method="post" action="/artikel/{{ item.id }}/reaktivieren" class="inline-form">
+      <button type="submit" class="button button--primary">Reaktivieren</button>
+    </form>
+  {% else %}
+    <p class="badge badge--{{ status.value }}">{{ status|status_label }}</p>
+
+    <p class="item-stock">
+      Bestand: <strong>{{ item.stock }} {{ item.unit }}</strong>
+      (Mindestbestand {{ item.reorder_level }}, Sollbestand {{ item.target_stock }}, Kaufeinheit
+      {{ item.pack_size }})
+    </p>
+
+    {% if reorder_qty is not none %}
+      <p class="item-reorder-hint">Nachkaufmenge: {{ reorder_qty }} {{ item.unit }}</p>
+    {% endif %}
+  {% endif %}
+
+  {% if item.note %}
+    <p class="item-note">{{ item.note }}</p>
+  {% endif %}
+
+  {% if not item.archived_at %}
+    <section>
+      <h2>Bestand korrigieren (Inventur)</h2>
+      {% if inventory_errors %}
+        <ul class="form-errors">
+          {% for error in inventory_errors %}<li>{{ error }}</li>{% endfor %}
+        </ul>
+      {% endif %}
+      <form method="post" action="/artikel/{{ item.id }}/inventur" class="item-form">
+        <input type="hidden" name="expected_stock" value="{{ inventory_expected_stock }}" />
+        <label for="actual_stock">Tatsächlicher Bestand</label>
+        <input
+          id="actual_stock"
+          name="actual_stock"
+          type="number"
+          min="0"
+          step="1"
+          required
+          value="{{ inventory_expected_stock }}"
+        />
+        <button type="submit" class="button">Bestand speichern</button>
+      </form>
+    </section>
+  {% endif %}
+
+  <section>
+    <h2>Stammdaten</h2>
+    {% if form_errors %}
+      <ul class="form-errors">
+        {% for error in form_errors %}<li>{{ error }}</li>{% endfor %}
+      </ul>
+    {% endif %}
+    <form method="post" action="/artikel/{{ item.id }}" class="item-form">
+      <label for="name">Name</label>
+      <input id="name" name="name" type="text" required value="{{ form_values.name }}" />
+
+      <label for="unit">Einheit</label>
+      <input id="unit" name="unit" type="text" required value="{{ form_values.unit }}" />
+
+      <label for="reorder_level">Mindestbestand</label>
+      <input
+        id="reorder_level"
+        name="reorder_level"
+        type="number"
+        min="0"
+        step="1"
+        required
+        value="{{ form_values.reorder_level }}"
+      />
+
+      <label for="target_stock">Sollbestand</label>
+      <input
+        id="target_stock"
+        name="target_stock"
+        type="number"
+        min="1"
+        step="1"
+        required
+        value="{{ form_values.target_stock }}"
+      />
+
+      <label for="pack_size">Kaufeinheit</label>
+      <input
+        id="pack_size"
+        name="pack_size"
+        type="number"
+        min="1"
+        step="1"
+        required
+        value="{{ form_values.pack_size }}"
+      />
+
+      <label for="note">Notiz</label>
+      <textarea id="note" name="note" rows="2">{{ form_values.note }}</textarea>
+
+      <button type="submit" class="button button--primary">Speichern</button>
+    </form>
+  </section>
+
+  {% if not item.archived_at %}
+    <form
+      method="post"
+      action="/artikel/{{ item.id }}/archivieren"
+      class="inline-form"
+      onsubmit="return confirm('Artikel wirklich archivieren?');"
+    >
+      <button type="submit" class="button button--danger">Archivieren</button>
+    </form>
+  {% endif %}
+
+  <section>
+    <h2>Verlauf</h2>
+    {% if movements %}
+      <ul class="movement-list">
+        {% for movement in movements %}
+          <li class="movement-list__item">
+            <span class="movement-list__time">{{ movement.created_at|local_time }}</span>
+            <span class="movement-list__kind">{{ movement.kind|movement_kind_label }}</span>
+            <span class="movement-list__delta">{{ "%+d"|format(movement.delta) }}</span>
+            <span class="movement-list__stock-after">→ {{ movement.stock_after }}</span>
+            {% if movement.note %}
+              <span class="movement-list__note">{{ movement.note }}</span>
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p>Noch keine Bewegungen.</p>
+    {% endif %}
+  </section>
+{% endblock %}

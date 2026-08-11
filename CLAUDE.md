@@ -49,7 +49,8 @@ Rate nicht bei Entscheidungen, die dem Nutzer gehören.
   Korrektur → `adjustment`, Bewegung/Journal → `movement`/`ledger`, Einkaufsliste →
   `shopping_list`, Laden → `store`, Inventur → `inventory` (fachlicher Vorgang; die dabei
   geschriebene Bewegung bleibt vom `kind` her eine `adjustment`), Rückgängig → `undo`,
-  Ausreichend → `ok`, Nachkaufen → `reorder`, Auf Liste → `on_list`.
+  Ausreichend → `ok`, Nachkaufen → `reorder`, Auf Liste → `on_list`, Archivieren → `archive`,
+  Reaktivieren → `reactivate`.
   Erweitere das Glossar, wenn ein neuer Begriff dazukommt.
 
 ## 3. Gesetzte Entscheidungen

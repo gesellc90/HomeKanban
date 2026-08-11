@@ -96,6 +96,17 @@ def sum_delta_for_item(connection: sqlite3.Connection, item_id: int) -> int:
     return int(row["total"])
 
 
+def list_for_item(
+    connection: sqlite3.Connection, item_id: int, *, limit: int = 20
+) -> list[MovementRow]:
+    """Verlauf für die Detailseite: neueste zuerst, begrenzt auf `limit` Einträge."""
+    rows = connection.execute(
+        "SELECT * FROM movements WHERE item_id = ? ORDER BY created_at DESC, id DESC LIMIT ?",
+        (item_id, limit),
+    ).fetchall()
+    return [_row_to_movement(row) for row in rows]
+
+
 def find_ledger_invariant_violations(connection: sqlite3.Connection) -> list[int]:
     """Item-IDs, bei denen `SUM(movements.delta) != items.stock` gilt (L2, ADR 0002)."""
     rows = connection.execute(

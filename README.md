@@ -3,7 +3,7 @@
 Kanban-Verwaltung für Alltagsverbrauchsmittel im Haushalt — läuft im Heimnetz auf einem
 Raspberry Pi, parallel zur bestehenden Web-App „Hängt! – jeder Strich zählt“.
 
-> **Status: M0 (Fundament & Entscheidungen) und M1 (Domänenmodell & Persistenz) umgesetzt.**
+> **Status: M0–M2 umgesetzt (Fundament, Domänenmodell & Persistenz, Board & Artikelpflege).**
 > Anforderungen und Rahmen: [`docs/PROJEKT-PROMPT.md`](docs/PROJEKT-PROMPT.md).
 > Architektur, Datenmodell, Meilensteine, Risiken: [`docs/PLAN.md`](docs/PLAN.md).
 
@@ -37,7 +37,7 @@ abhakbare Checkliste in Apple Notes holt.
 | --- | --- | --- |
 | M0 | Fundament & technische Entscheidungen | erledigt |
 | M1 | Domänenmodell & Persistenz | erledigt |
-| M2 | Kanban-Board & Artikelpflege | offen |
+| M2 | Kanban-Board & Artikelpflege | erledigt |
 | M3 | QR-Entnahme-Flow | offen |
 | M4 | Einkaufsliste & Apple-Notes-Export | offen |
 | M5 | Etiketten (Einzel-QR + PDF-Bögen) | offen |

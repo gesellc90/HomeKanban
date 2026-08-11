@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Neuer Artikel – HomeKanban{% endblock %}
+{% block content %}
+  <a class="back-link" href="/">← Zurück zum Board</a>
+  <h1>Neuer Artikel</h1>
+
+  {% if errors %}
+    <ul class="form-errors">
+      {% for error in errors %}<li>{{ error }}</li>{% endfor %}
+    </ul>
+  {% endif %}
+
+  <form method="post" action="/artikel" class="item-form">
+    <label for="name">Name</label>
+    <input id="name" name="name" type="text" required value="{{ values.name }}" />
+
+    <label for="unit">Einheit</label>
+    <input
+      id="unit"
+      name="unit"
+      type="text"
+      required
+      value="{{ values.unit }}"
+      placeholder="z. B. Packung, Rolle, Flasche"
+    />
+
+    <label for="stock">Anfangsbestand</label>
+    <input id="stock" name="stock" type="number" min="0" step="1" required value="{{ values.stock }}" />
+
+    <label for="reorder_level">Mindestbestand</label>
+    <input
+      id="reorder_level"
+      name="reorder_level"
+      type="number"
+      min="0"
+      step="1"
+      required
+      value="{{ values.reorder_level }}"
+    />
+
+    <label for="target_stock">Sollbestand</label>
+    <input
+      id="target_stock"
+      name="target_stock"
+      type="number"
+      min="1"
+      step="1"
+      required
+      value="{{ values.target_stock }}"
+    />
+
+    <label for="pack_size">Kaufeinheit</label>
+    <input
+      id="pack_size"
+      name="pack_size"
+      type="number"
+      min="1"
+      step="1"
+      required
+      value="{{ values.pack_size }}"
+    />
+
+    <label for="note">Notiz</label>
+    <textarea id="note" name="note" rows="2">{{ values.note }}</textarea>
+
+    <button type="submit" class="button button--primary">Anlegen</button>
+  </form>
+{% endblock %}
