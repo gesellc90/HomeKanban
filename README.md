@@ -3,7 +3,7 @@
 Kanban-Verwaltung für Alltagsverbrauchsmittel im Haushalt — läuft im Heimnetz auf einem
 Raspberry Pi, parallel zur bestehenden Web-App „Hängt! – jeder Strich zählt“.
 
-> **Status: Planung abgeschlossen, Umsetzung noch nicht begonnen.**
+> **Status: M0 (Fundament & Entscheidungen) umgesetzt, M1 in Arbeit.**
 > Anforderungen und Rahmen: [`docs/PROJEKT-PROMPT.md`](docs/PROJEKT-PROMPT.md).
 > Architektur, Datenmodell, Meilensteine, Risiken: [`docs/PLAN.md`](docs/PLAN.md).
 
@@ -35,7 +35,7 @@ abhakbare Checkliste in Apple Notes holt.
 
 | # | Meilenstein | Status |
 | --- | --- | --- |
-| M0 | Fundament & technische Entscheidungen | offen |
+| M0 | Fundament & technische Entscheidungen | erledigt |
 | M1 | Domänenmodell & Persistenz | offen |
 | M2 | Kanban-Board & Artikelpflege | offen |
 | M3 | QR-Entnahme-Flow | offen |
@@ -63,7 +63,7 @@ Einmalig nach dem Klonen:
 
 ```bash
 make hooks     # aktiviert die Git-Hooks (setzt core.hooksPath)
-make setup     # richtet die Entwicklungsumgebung ein (ab M0)
+make setup     # richtet die Entwicklungsumgebung ein (venv, Abhängigkeiten aus pyproject.toml)
 ```
 
 Danach greifen automatisch:
@@ -80,8 +80,8 @@ make test      # Tests
 make check     # alles zusammen (das, was vor einem Push laufen muss)
 ```
 
-Solange die Toolchain noch nicht steht (M0), melden die Targets sich als „noch nicht
-konfiguriert“ und blockieren nicht.
+Seit M0 tun die Targets echte Arbeit: `ruff` (Format + Lint), `mypy` (scharf auf `app/domain/`)
+und `pytest`.
 
 ## Repository-Struktur
 

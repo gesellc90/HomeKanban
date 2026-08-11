@@ -6,7 +6,7 @@
 .DEFAULT_GOAL := help
 SHELL := /bin/sh
 
-PYTHON ?= python3
+PYTHON ?= python3.12
 VENV   ?= .venv
 
 .PHONY: help hooks setup fmt lint test check clean
@@ -38,11 +38,16 @@ fmt: ## Code formatieren
 		echo "fmt: Formatter noch nicht konfiguriert (kommt in M0) — übersprungen"; \
 	fi
 
-lint: ## Statische Prüfung
+lint: ## Statische Prüfung (Format, Ruff, mypy auf app/domain)
 	@if [ -x $(VENV)/bin/ruff ]; then \
 		$(VENV)/bin/ruff format --check . && $(VENV)/bin/ruff check .; \
 	else \
 		echo "lint: Linter noch nicht konfiguriert (kommt in M0) — übersprungen"; \
+	fi
+	@if [ -x $(VENV)/bin/mypy ]; then \
+		$(VENV)/bin/mypy; \
+	else \
+		echo "lint: mypy noch nicht konfiguriert (kommt in M0) — übersprungen"; \
 	fi
 
 test: ## Tests ausführen
