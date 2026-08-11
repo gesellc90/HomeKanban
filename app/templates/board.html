@@ -3,6 +3,7 @@
 {% block content %}
   <div class="board-toolbar">
     <a class="button button--primary" href="/artikel/neu">+ Neuer Artikel</a>
+    <a class="button" href="/liste">Einkaufsliste</a>
   </div>
 
   <div class="board">
@@ -59,7 +60,9 @@
           {% endfor %}
         </ul>
       {% else %}
-        <p class="board-column__empty">Noch leer — kommt mit der Einkaufsliste (ab M4).</p>
+        <p class="board-column__empty">
+          Noch leer — <a href="/liste">Einkaufsliste öffnen</a>.
+        </p>
       {% endif %}
     </section>
   </div>

@@ -1,7 +1,7 @@
 """App-Factory: Router-Registrierung und Lifespan (Migrationen, DB-Verbindung).
 
-Ab M2 mit der Web-Schicht (Board, Artikelpflege), ab M3 mit dem QR-Entnahme-Flow — siehe
-docs/PLAN.md §9.
+Ab M2 mit der Web-Schicht (Board, Artikelpflege), ab M3 mit dem QR-Entnahme-Flow, ab M4 mit
+Einkaufsliste und Export-Schnittstelle — siehe docs/PLAN.md §9.
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from app.api.export import router as export_router
 from app.api.health import router as health_router
 from app.config import Settings, get_settings
 from app.db import connect
@@ -20,6 +21,7 @@ from app.migrate import migrate
 from app.web.board import router as board_router
 from app.web.items import router as items_router
 from app.web.scan import router as scan_router
+from app.web.shopping import router as shopping_router
 
 MIGRATIONS_DIR = Path(__file__).resolve().parent.parent / "migrations"
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -42,9 +44,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
     app.include_router(health_router)
+    app.include_router(export_router)
     app.include_router(board_router)
     app.include_router(items_router)
     app.include_router(scan_router)
+    app.include_router(shopping_router)
 
     return app
 

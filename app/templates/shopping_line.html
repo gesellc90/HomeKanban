@@ -1,0 +1,70 @@
+{# Eine Position der Einkaufsliste. Wird sowohl in der Seite als auch als HTMX-Partial gerendert
+   (docs/PLAN.md §7, M4) — deshalb steht hier alles, was die Zeile zum Leben braucht, und nichts
+   aus der Umgebung. Trefferflächen ≥ 44 px (CLAUDE.md §8): abgehakt wird einhändig im Flur. #}
+<li
+  id="zeile-{{ view.line.id }}"
+  class="list-line{% if view.line.is_checked %} list-line--checked{% endif %}"
+>
+  <div class="list-line__head">
+    <span class="list-line__name">{{ view.line.name_snapshot }}</span>
+    <span class="list-line__qty">{{ view.quantity_text }}</span>
+  </div>
+
+  {% if view.error %}
+    <p class="list-line__error" role="alert">{{ view.error }}</p>
+  {% endif %}
+  {% if view.note %}
+    <p class="list-line__note">{{ view.note }}</p>
+  {% endif %}
+
+  {% if view.line.is_dropped %}
+    <p class="list-line__state">Nicht mehr nötig — von der Liste genommen.</p>
+  {% elif view.line.is_checked %}
+    <p class="list-line__state">
+      Gekauft{% if view.purchased_text %}: {{ view.purchased_text }}{% endif %}
+    </p>
+    <form
+      method="post"
+      action="/liste/{{ shopping_list.id }}/zeilen/{{ view.line.id }}/zuruecknehmen"
+      hx-post="/liste/{{ shopping_list.id }}/zeilen/{{ view.line.id }}/zuruecknehmen"
+      hx-target="#zeile-{{ view.line.id }}"
+      hx-swap="outerHTML"
+      class="list-line__form"
+    >
+      <button type="submit" class="button">Doch nicht gekauft</button>
+    </form>
+  {% else %}
+    <form
+      method="post"
+      action="/liste/{{ shopping_list.id }}/zeilen/{{ view.line.id }}/abhaken"
+      hx-post="/liste/{{ shopping_list.id }}/zeilen/{{ view.line.id }}/abhaken"
+      hx-target="#zeile-{{ view.line.id }}"
+      hx-swap="outerHTML"
+      class="list-line__form"
+    >
+      <button type="submit" class="button button--primary">Gekauft</button>
+    </form>
+    <form
+      method="post"
+      action="/liste/{{ shopping_list.id }}/zeilen/{{ view.line.id }}/abhaken"
+      hx-post="/liste/{{ shopping_list.id }}/zeilen/{{ view.line.id }}/abhaken"
+      hx-target="#zeile-{{ view.line.id }}"
+      hx-swap="outerHTML"
+      class="list-line__form list-line__form--qty"
+    >
+      <label for="menge-{{ view.line.id }}">Andere Menge</label>
+      <input
+        id="menge-{{ view.line.id }}"
+        name="purchased_qty"
+        type="number"
+        min="1"
+        step="1"
+        inputmode="numeric"
+      />
+      <button type="submit" class="button">Buchen</button>
+    </form>
+  {% endif %}
+</li>
+{# Beim Partial-Tausch wandert die Aktionsleiste als zweites, "out of band" getauschtes Element
+   mit — sonst bliebe die Zählung „x von y erledigt“ nach dem Abhaken stehen. #}
+{% if oob_actions %}{% include "shopping_actions.html" %}{% endif %}

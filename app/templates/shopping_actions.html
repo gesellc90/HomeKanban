@@ -1,0 +1,23 @@
+{# Kopfleiste der offenen Liste: Stand, „Alles gekauft“, Abschließen. Wird beim HTMX-Partial mit
+   `hx-swap-oob` mitgetauscht, damit die Zählung nach dem Abhaken stimmt. #}
+<div
+  id="listen-aktionen"
+  class="list-actions"
+  {% if oob %}hx-swap-oob="true"{% endif %}
+>
+  <p class="list-actions__summary">
+    {{ summary.checked }} von {{ summary.total }} erledigt{% if summary.open %} · {{ summary.open }} offen{% endif %}
+  </p>
+
+  {% if summary.open %}
+    {# O1 (docs/PLAN.md §10): „Alles gekauft“ ist der große Standardweg — der Heimweg kostet
+       einen Tap. Abweichende Mengen werden darunter Position für Position korrigiert. #}
+    <form method="post" action="/liste/{{ shopping_list.id }}/alles-gekauft">
+      <button type="submit" class="button button--primary button--wide">Alles gekauft</button>
+    </form>
+  {% endif %}
+
+  <form method="post" action="/liste/{{ shopping_list.id }}/abschliessen" class="list-actions__secondary">
+    <button type="submit" class="button">Einkauf abschließen</button>
+  </form>
+</div>
