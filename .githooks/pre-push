@@ -1,0 +1,10 @@
+#!/bin/sh
+# HomeKanban pre-push: vollständiger Lauf von Lint und Tests.
+# Ersetzt die CI, die dieses Projekt bewusst nicht hat.
+# Aktivieren mit: make hooks
+
+set -e
+
+echo "[pre-push] vollständige Prüfung (Lint + Tests)"
+make check
+echo "[pre-push] in Ordnung — Push wird ausgeführt"

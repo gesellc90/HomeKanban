@@ -1,0 +1,31 @@
+#!/bin/sh
+# HomeKanban pre-commit: Format- und Lint-Prüfung.
+# Dieses Projekt nutzt keine GitHub Actions — dieser Hook ist Teil der Qualitätssicherung.
+# Aktivieren mit: make hooks
+
+set -e
+
+echo "[pre-commit] Format- und Lint-Prüfung"
+
+# Auf versehentlich eingecheckte Geheimnisse prüfen.
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+for f in $staged; do
+	case "$f" in
+	.env | .env.local | .env.production | *.pem | *.key | *_rsa)
+		echo "[pre-commit] ABBRUCH: '$f' gehört nicht ins Repository."
+		echo "             Entfernen mit: git restore --staged \"$f\""
+		exit 1
+		;;
+	esac
+done
+
+# GitHub-Workflows sind in diesem Projekt bewusst ausgeschlossen.
+if printf '%s\n' $staged | grep -q '^\.github/workflows/'; then
+	echo "[pre-commit] ABBRUCH: Dieses Projekt läuft ohne GitHub Actions."
+	echo "             Checks gehören nach .githooks/ bzw. ins Makefile."
+	exit 1
+fi
+
+make lint
+
+echo "[pre-commit] in Ordnung"
