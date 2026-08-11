@@ -1,18 +1,34 @@
 """Bereitschafts-Endpoint.
 
-Ab M1, sobald das Bewegungsjournal existiert, prüft dieser Endpoint zusätzlich die Invariante
-`SUM(movements.delta) == items.stock` (docs/PLAN.md L2). In M0 gibt es noch keine Tabellen dafür —
-hier wird nur geprüft, dass die App läuft und die Datenbankverbindung erreichbar ist.
+Prüft zusätzlich die Invariante `SUM(movements.delta) == items.stock` (docs/PLAN.md L2,
+ADR 0002) je Artikel. Ein Verstoß liefert `503` statt eines stillen `200` — genau die
+Fehlerklasse, die diese Invariante eigentlich ausschließt, soll sichtbar bleiben.
 """
 
 from __future__ import annotations
 
 from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse
+
+from app.repo.movements import find_ledger_invariant_violations
 
 router = APIRouter()
 
 
 @router.get("/healthz")
-def healthz(request: Request) -> dict[str, str]:
-    request.app.state.db.execute("SELECT 1")
-    return {"status": "ok"}
+def healthz(request: Request) -> JSONResponse:
+    connection = request.app.state.db
+    connection.execute("SELECT 1")
+
+    violating_item_ids = find_ledger_invariant_violations(connection)
+    if violating_item_ids:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "error",
+                "detail": "Invariante SUM(movements.delta) == items.stock verletzt",
+                "item_ids": violating_item_ids,
+            },
+        )
+
+    return JSONResponse(status_code=200, content={"status": "ok"})
