@@ -3,8 +3,9 @@
 Kanban-Verwaltung für Alltagsverbrauchsmittel im Haushalt — läuft im Heimnetz auf einem
 Raspberry Pi, parallel zur bestehenden Web-App „Hängt! – jeder Strich zählt“.
 
-> **Status: Planungsphase.** Es gibt noch keinen Anwendungscode. Anforderungen, Technologie-Rahmen
-> und Meilensteine stehen in [`docs/PROJEKT-PROMPT.md`](docs/PROJEKT-PROMPT.md).
+> **Status: Planung abgeschlossen, Umsetzung noch nicht begonnen.**
+> Anforderungen und Rahmen: [`docs/PROJEKT-PROMPT.md`](docs/PROJEKT-PROMPT.md).
+> Architektur, Datenmodell, Meilensteine, Risiken: [`docs/PLAN.md`](docs/PLAN.md).
 
 ## Idee in drei Sätzen
 
@@ -45,8 +46,10 @@ abhakbare Checkliste in Apple Notes holt.
 | M8 | Verbrauchshistorie & Prognose | offen |
 | M9 | Backup & Restore | offen |
 
-Details zu Umfang, Definition of Done und Testfokus je Meilenstein:
-[`docs/PROJEKT-PROMPT.md`](docs/PROJEKT-PROMPT.md).
+Umfang, Definition of Done und Testfokus je Meilenstein: [`docs/PLAN.md`](docs/PLAN.md) §9.
+
+**Vor dem Etikettendruck (M5) zu klären:** welchen Port „Hängt!“ belegt und ob ein Reverse Proxy
+davor liegt — die Basis-URL steckt in jedem gedruckten QR-Code. Siehe `docs/PLAN.md` §10, O2.
 
 ## Tests laufen lokal — nicht in der Cloud
 
@@ -83,7 +86,8 @@ konfiguriert“ und blockieren nicht.
 CLAUDE.md                        Arbeitsanweisungen für Claude Code in diesem Projekt
 Makefile                         Einstiegspunkt für alle lokalen Checks
 docs/PROJEKT-PROMPT.md           Anforderungen, Technologie-Rahmen, Meilensteine
-docs/PLAN.md                     Detailplanung (entsteht im Planungsdurchgang)
+docs/PLAN.md                     Detailplanung: Architektur, Datenmodell, Risiken, Szenarien
+docs/KURZBEFEHL.md               Anleitung für den iOS-Kurzbefehl (entsteht in M4)
 docs/adr/                        Architekturentscheidungen, je eine Datei
 .githooks/                       versionierte Git-Hooks (pre-commit, pre-push)
 .github/                         PR- und Issue-Vorlagen (keine Workflows)
