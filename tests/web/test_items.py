@@ -212,6 +212,130 @@ class TestUpdateItem:
         assert "bereits" in response.text
 
 
+class TestTaxonomyAssignment:
+    """Regressionstest zur Lücke aus docs/PLAN.md §9 M7 Punkt 4: `items_repo.update()` kannte
+    `category_id`/`store_id` bisher nicht, die Zuordnung fiel beim Speichern still unter den
+    Tisch."""
+
+    def test_category_and_store_survive_creation(self, client: TestClient) -> None:
+        client.post("/kategorien", data={"name": "Vorrat"})
+        client.post("/laeden", data={"name": "REWE"})
+        category_id = _taxonomy_id(client, "categories", "Vorrat")
+        store_id = _taxonomy_id(client, "stores", "REWE")
+
+        item_id = _create_item(client, name="Kaffee")
+        response = client.post(
+            f"/artikel/{item_id}",
+            data={
+                "name": "Kaffee",
+                "unit": "Packung",
+                "note": "",
+                "reorder_level": "1",
+                "target_stock": "5",
+                "pack_size": "1",
+                "category_id": str(category_id),
+                "store_id": str(store_id),
+            },
+            follow_redirects=False,
+        )
+
+        assert response.status_code == 303
+        from app.repo import items as items_repo
+
+        item = items_repo.get_by_id(client.app.state.db, item_id)  # type: ignore[attr-defined]
+        assert item is not None
+        assert item.category_id == category_id
+        assert item.store_id == store_id
+
+    def test_none_selection_clears_assignment(self, client: TestClient) -> None:
+        client.post("/kategorien", data={"name": "Vorrat"})
+        category_id = _taxonomy_id(client, "categories", "Vorrat")
+        item_id = _create_item(client, name="Kaffee")
+        client.post(
+            f"/artikel/{item_id}",
+            data={
+                "name": "Kaffee",
+                "unit": "Packung",
+                "note": "",
+                "reorder_level": "1",
+                "target_stock": "5",
+                "pack_size": "1",
+                "category_id": str(category_id),
+                "store_id": "",
+            },
+        )
+
+        client.post(
+            f"/artikel/{item_id}",
+            data={
+                "name": "Kaffee",
+                "unit": "Packung",
+                "note": "",
+                "reorder_level": "1",
+                "target_stock": "5",
+                "pack_size": "1",
+                "category_id": "",
+                "store_id": "",
+            },
+        )
+
+        from app.repo import items as items_repo
+
+        item = items_repo.get_by_id(client.app.state.db, item_id)  # type: ignore[attr-defined]
+        assert item is not None
+        assert item.category_id is None
+
+    def test_unknown_category_id_is_rejected_with_german_message_and_non_500(
+        self, client: TestClient
+    ) -> None:
+        item_id = _create_item(client, name="Kaffee")
+
+        response = client.post(
+            f"/artikel/{item_id}",
+            data={
+                "name": "Kaffee",
+                "unit": "Packung",
+                "note": "",
+                "reorder_level": "1",
+                "target_stock": "5",
+                "pack_size": "1",
+                "category_id": "999999",
+                "store_id": "",
+            },
+        )
+
+        assert response.status_code == 422
+        assert "Unbekannte Kategorie-Auswahl" in response.text
+
+    def test_unknown_store_id_on_creation_is_rejected_with_german_message_and_non_500(
+        self, client: TestClient
+    ) -> None:
+        response = client.post(
+            "/artikel",
+            data={
+                "name": "Kaffee",
+                "unit": "Packung",
+                "stock": "1",
+                "reorder_level": "1",
+                "target_stock": "5",
+                "pack_size": "1",
+                "category_id": "",
+                "store_id": "999999",
+            },
+        )
+
+        assert response.status_code == 422
+        assert "Unbekannte Laden-Auswahl" in response.text
+
+
+def _taxonomy_id(client: TestClient, table: str, name: str) -> int:
+    from app.repo import taxonomy as taxonomy_repo
+
+    connection = client.app.state.db  # type: ignore[attr-defined]
+    entries = taxonomy_repo.list_all(connection, table)  # type: ignore[arg-type]
+    return next(entry.id for entry in entries if entry.name == name)
+
+
 class TestApplyInventory:
     def test_matching_expected_stock_updates_and_redirects(self, client: TestClient) -> None:
         item_id = _create_item(client, name="Kaffee", stock=3, reorder_level=1, target_stock=5)

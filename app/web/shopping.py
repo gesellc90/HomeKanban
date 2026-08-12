@@ -22,6 +22,7 @@ from typing import Any
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
+from app.domain.grouping import Group, group_and_sort
 from app.domain.pluralization import format_quantity
 from app.repo import shopping_lists as lists_repo
 from app.services import shopping as shopping_service
@@ -39,6 +40,30 @@ class LineView:
     purchased_text: str | None
     error: str | None = None
     note: str | None = None
+
+    # Leitet an die Zeile weiter, damit ein `LineView` selbst das `Groupable`-Protokoll aus
+    # `app/domain/grouping.py` erfüllt (M7) — die Gruppierung in `/liste` arbeitet direkt mit den
+    # bereits für die Anzeige aufbereiteten Views, ohne einen zweiten Durchlauf über die Zeilen.
+
+    @property
+    def store_name(self) -> str | None:
+        return self.line.store_name
+
+    @property
+    def store_position(self) -> int | None:
+        return self.line.store_position
+
+    @property
+    def category_name(self) -> str | None:
+        return self.line.category_name
+
+    @property
+    def category_position(self) -> int | None:
+        return self.line.category_position
+
+    @property
+    def sort_position(self) -> int:
+        return self.line.sort_position
 
 
 @dataclass(frozen=True)
@@ -105,10 +130,14 @@ def _render_page(
         for line in all_lines
         if not line.is_dropped
     ]
+    # Gruppiert nach Laden, innerhalb nach Kategorie-Position (§7/§9 M7) — dieselbe Logik wie im
+    # Export, hier auf den bereits für die Anzeige aufbereiteten `LineView`s.
+    groups: tuple[Group[LineView], ...] = group_and_sort(views)
 
     context: dict[str, Any] = {
         "shopping_list": list_row,
         "views": views,
+        "groups": groups,
         "summary": _summary(all_lines),
     }
     return templates.TemplateResponse(

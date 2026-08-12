@@ -37,6 +37,10 @@ class ShoppingListLineRow:
     position: int
     checked_at: str | None
     dropped_at: str | None
+    store_snapshot: str | None = None
+    store_position_snapshot: int | None = None
+    category_snapshot: str | None = None
+    category_position_snapshot: int | None = None
 
     @property
     def is_checked(self) -> bool:
@@ -50,6 +54,30 @@ class ShoppingListLineRow:
     def is_open(self) -> bool:
         """Offen = weder abgehakt noch verworfen — das sind die Positionen im Export."""
         return not self.is_checked and not self.is_dropped
+
+    # Aliase auf die Laden-/Kategorie-Schnappschussfelder, damit eine `ShoppingListLineRow` direkt
+    # das `Groupable`-Protokoll aus `app/domain/grouping.py` erfüllt (M7, §7/§9) — ohne dass die
+    # Web-/API-Schicht dafür ein eigenes Zwischenobjekt bauen muss.
+
+    @property
+    def store_name(self) -> str | None:
+        return self.store_snapshot
+
+    @property
+    def store_position(self) -> int | None:
+        return self.store_position_snapshot
+
+    @property
+    def category_name(self) -> str | None:
+        return self.category_snapshot
+
+    @property
+    def category_position(self) -> int | None:
+        return self.category_position_snapshot
+
+    @property
+    def sort_position(self) -> int:
+        return self.position
 
 
 def _row_to_list(row: sqlite3.Row) -> ShoppingListRow:
@@ -75,6 +103,10 @@ def _row_to_line(row: sqlite3.Row) -> ShoppingListLineRow:
         position=row["position"],
         checked_at=row["checked_at"],
         dropped_at=row["dropped_at"],
+        store_snapshot=row["store_snapshot"],
+        store_position_snapshot=row["store_position_snapshot"],
+        category_snapshot=row["category_snapshot"],
+        category_position_snapshot=row["category_position_snapshot"],
     )
 
 
@@ -192,14 +224,31 @@ def insert_line(
     name_snapshot: str,
     unit_snapshot: str,
     position: int,
+    store_snapshot: str | None = None,
+    store_position_snapshot: int | None = None,
+    category_snapshot: str | None = None,
+    category_position_snapshot: int | None = None,
 ) -> int:
     cursor = connection.execute(
         """
         INSERT INTO shopping_list_lines (
-            list_id, item_id, suggested_qty, name_snapshot, unit_snapshot, position
-        ) VALUES (?, ?, ?, ?, ?, ?)
+            list_id, item_id, suggested_qty, name_snapshot, unit_snapshot, position,
+            store_snapshot, store_position_snapshot, category_snapshot,
+            category_position_snapshot
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (list_id, item_id, suggested_qty, name_snapshot, unit_snapshot, position),
+        (
+            list_id,
+            item_id,
+            suggested_qty,
+            name_snapshot,
+            unit_snapshot,
+            position,
+            store_snapshot,
+            store_position_snapshot,
+            category_snapshot,
+            category_position_snapshot,
+        ),
     )
     assert cursor.lastrowid is not None
     return cursor.lastrowid

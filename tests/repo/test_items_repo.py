@@ -5,6 +5,7 @@ import sqlite3
 import pytest
 
 from app.repo import items as items_repo
+from app.repo import taxonomy as taxonomy_repo
 from app.services import stock
 
 _NOW = "2026-01-01T00:00:00.000Z"
@@ -45,6 +46,8 @@ def test_update_changes_stammdaten_but_not_stock(connection: sqlite3.Connection)
         reorder_level=2,
         target_stock=8,
         pack_size=2,
+        category_id=None,
+        store_id=None,
         updated_at=_NOW,
     )
 
@@ -57,6 +60,34 @@ def test_update_changes_stammdaten_but_not_stock(connection: sqlite3.Connection)
     assert item.target_stock == 8
     assert item.pack_size == 2
     assert item.stock == 3  # unverändert — Bestand läuft nur über das Bewegungsjournal
+
+
+def test_update_persists_category_and_store_assignment(connection: sqlite3.Connection) -> None:
+    """Regressionstest zur Lücke aus docs/PLAN.md §9 M7 Punkt 4: `update()` kannte
+    `category_id`/`store_id` bisher nicht, die Zuordnung fiel beim Speichern still unter den
+    Tisch."""
+    item_id = _create(connection)
+    category_id = taxonomy_repo.insert(connection, "categories", name="Vorrat", position=0)
+    store_id = taxonomy_repo.insert(connection, "stores", name="REWE", position=0)
+
+    items_repo.update(
+        connection,
+        item_id,
+        name="Kaffee",
+        unit="Packung",
+        note=None,
+        reorder_level=1,
+        target_stock=5,
+        pack_size=1,
+        category_id=category_id,
+        store_id=store_id,
+        updated_at=_NOW,
+    )
+
+    item = items_repo.get_by_id(connection, item_id)
+    assert item is not None
+    assert item.category_id == category_id
+    assert item.store_id == store_id
 
 
 def test_update_to_duplicate_active_name_violates_check(connection: sqlite3.Connection) -> None:
@@ -73,6 +104,8 @@ def test_update_to_duplicate_active_name_violates_check(connection: sqlite3.Conn
             reorder_level=1,
             target_stock=5,
             pack_size=1,
+            category_id=None,
+            store_id=None,
             updated_at=_NOW,
         )
 

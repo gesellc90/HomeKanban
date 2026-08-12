@@ -57,13 +57,32 @@ curl -X POST "http://raspberrypi.local:8181/api/shopping-list/export" \
      -H "X-API-Key: DEIN-SCHLUESSEL"
 ```
 
-Erwartete Antwort — eine Zeile je Artikel:
+Erwartete Antwort — eine Zeile je Artikel, ohne Laden-/Kategoriepflege wie hier:
 
 ```
 Spülmaschinentabs — 1 Packung
 Klopapier — 10 Rollen
 Kaffee — 2 Packungen
 ```
+
+**Seit M7 (Kategorien & Läden):** Sind Artikeln Läden zugeordnet, gruppiert der Server die Antwort
+danach — mit dem Ladennamen als eigener Zeile davor:
+
+```
+REWE
+Klopapier — 10 Rollen
+Aldi
+Kaffee — 2 Packungen
+Sonstiges
+Spülmaschinentabs — 1 Packung
+```
+
+**Wichtig:** Der nächste Schritt (Abschnitt 3, „Text teilen“) kennt keine Überschriften — er teilt
+stur an Zeilenumbrüchen. Jede Ladenzeile wird dadurch selbst zu einem Häkchen in der Notiz, das
+nichts zum Abhaken hat außer sich selbst. Das ist bewusst so entschieden (siehe `docs/PLAN.md`,
+M7-Fragerunde, Frage 2): Die sichtbare Struktur im Laden — „ich bin jetzt bei REWE“ — wiegt
+schwerer als der eine überflüssige Punkt je Gruppe. Ist keinem einzigen Artikel im Haushalt ein
+Laden zugeordnet, bleibt die Antwort wie im ersten Beispiel ohne jede Überschrift.
 
 Ist gerade nichts zu kaufen, ist die Antwort **leer**. Das ist richtig so und kein Fehler.
 
@@ -233,3 +252,8 @@ deshalb:
 Bitte einmal durchspielen und notieren, welcher der drei Wege bei dir funktioniert hat:
 das automatische Fortführen der Checkliste, Rückfall 1 oder Rückfall 2. Danach kann die Anleitung
 auf den tatsächlich funktionierenden Weg eingekürzt werden.
+
+**Seit M7 zusätzlich offen:** Ob die Ladenüberschrift als eigener, harmloser Punkt in der Notiz
+ankommt — wie in Abschnitt 1 beschrieben — und ob sich das im Alltag beim Abhaken im Laden als
+störend erweist, ist ebenfalls nicht lokal prüfbar und wartet auf denselben ersten Durchlauf auf
+dem iPhone.

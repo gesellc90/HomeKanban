@@ -33,6 +33,8 @@ from app.domain.shopping import (
 from app.repo import items as items_repo
 from app.repo import movements as movements_repo
 from app.repo import shopping_lists as lists_repo
+from app.repo import taxonomy as taxonomy_repo
+from app.repo.taxonomy import TaxonomyRow
 from app.services.stock import book_restock, book_reversal, utc_now_iso
 
 SOURCE = "shopping_list"
@@ -101,23 +103,44 @@ def ensure_open_list(connection: sqlite3.Connection) -> lists_repo.ShoppingListR
     return created
 
 
+def _reconciliation_item(
+    item: items_repo.ItemRow,
+    *,
+    categories_by_id: dict[int, TaxonomyRow],
+    stores_by_id: dict[int, TaxonomyRow],
+) -> ReconciliationItem:
+    """Reichert einen Artikel um den aktuellen Stand von Laden/Kategorie an — beim Anfügen einer
+    neuen Position friert `plan_reconciliation` diesen Stand ein (M7, Frage 1 der Fragerunde)."""
+    category = categories_by_id.get(item.category_id) if item.category_id is not None else None
+    store = stores_by_id.get(item.store_id) if item.store_id is not None else None
+    return ReconciliationItem(
+        item_id=item.id,
+        name=item.name,
+        unit=item.unit,
+        stock=item.stock,
+        reorder_level=item.reorder_level,
+        target_stock=item.target_stock,
+        pack_size=item.pack_size,
+        store_name=store.name if store is not None else None,
+        store_position=store.position if store is not None else None,
+        category_name=category.name if category is not None else None,
+        category_position=category.position if category is not None else None,
+    )
+
+
 def reconcile(connection: sqlite3.Connection, list_id: int) -> ReconciliationPlan:
     """Führt den Abgleich aus §6 gegen eine offene Liste aus und liefert, was getan wurde."""
     with transaction(connection):
         list_row = _require_open_list(connection, list_id)
         lines = lists_repo.list_lines(connection, list_row.id)
         active_items = items_repo.list_active(connection)
+        categories_by_id = {row.id: row for row in taxonomy_repo.list_all(connection, "categories")}
+        stores_by_id = {row.id: row for row in taxonomy_repo.list_all(connection, "stores")}
 
         plan = plan_reconciliation(
             items=[
-                ReconciliationItem(
-                    item_id=item.id,
-                    name=item.name,
-                    unit=item.unit,
-                    stock=item.stock,
-                    reorder_level=item.reorder_level,
-                    target_stock=item.target_stock,
-                    pack_size=item.pack_size,
+                _reconciliation_item(
+                    item, categories_by_id=categories_by_id, stores_by_id=stores_by_id
                 )
                 for item in active_items
             ],
@@ -150,6 +173,10 @@ def reconcile(connection: sqlite3.Connection, list_id: int) -> ReconciliationPla
                 name_snapshot=line_to_append.name_snapshot,
                 unit_snapshot=line_to_append.unit_snapshot,
                 position=line_to_append.position,
+                store_snapshot=line_to_append.store_snapshot,
+                store_position_snapshot=line_to_append.store_position_snapshot,
+                category_snapshot=line_to_append.category_snapshot,
+                category_position_snapshot=line_to_append.category_position_snapshot,
             )
 
     return plan

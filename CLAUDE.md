@@ -63,7 +63,12 @@ Rate nicht bei Entscheidungen, die dem Nutzer gehören.
   `preset` (`GridPreset`), frei einstellbares Raster → `custom`, Bogenaufteilung →
   `pagination` (Funktion: `paginate_labels`), Kalibrierung → `calibration`, Ruhezone des
   QR-Codes → `border`, Fehlerkorrekturstufe → `error correction`, Modul (kleinstes Quadrat im
-  QR-Code) → `module`.
+  QR-Code) → `module`, Gruppierung → `grouping` (Funktion: `group_and_sort`,
+  `app/domain/grouping.py`), Sammelgruppe nicht zugeordneter Einträge → `Sonstiges`
+  (Konstante `MISC_LABEL`), Umsortieren (Positionstausch bei Kategorie/Laden, nicht zu verwechseln
+  mit `reorder` = Nachkaufen) → `swap_positions`, eingefrorener Stand von Laden/Kategorie zum
+  Anfügezeitpunkt einer Listenposition → `store_snapshot`/`category_snapshot`
+  (`store_position_snapshot`/`category_position_snapshot`).
   Erweitere das Glossar, wenn ein neuer Begriff dazukommt.
 
 ## 3. Gesetzte Entscheidungen

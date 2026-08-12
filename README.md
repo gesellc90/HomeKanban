@@ -3,11 +3,13 @@
 Kanban-Verwaltung für Alltagsverbrauchsmittel im Haushalt — läuft im Heimnetz auf einem
 Raspberry Pi, parallel zur bestehenden Web-App „Hängt! – jeder Strich zählt“.
 
-> **Status: M0–M5 umgesetzt (Fundament, Domänenmodell & Persistenz, Board & Artikelpflege,
-> QR-Entnahme-Flow, Einkaufsliste & Apple-Notes-Export, Etiketten).** Zwei Punkte stehen noch aus,
-> beide brauchen Hardware statt Code: Der iOS-Kurzbefehl aus M4 ist noch nicht auf dem iPhone
-> durchgeführt worden ([`docs/KURZBEFEHL.md`](docs/KURZBEFEHL.md)), und die Etiketten aus M5 sind
-> noch nicht gedruckt, gemessen und gescannt ([`ops/ETIKETTEN.md`](ops/ETIKETTEN.md)).
+> **Status: M0–M5 und M7 umgesetzt (Fundament, Domänenmodell & Persistenz, Board & Artikelpflege,
+> QR-Entnahme-Flow, Einkaufsliste & Apple-Notes-Export, Etiketten, Kategorien & Ladenzuordnung).**
+> Drei Punkte stehen noch aus, alle brauchen ein iPhone oder einen Drucker statt Code: Der
+> iOS-Kurzbefehl aus M4 ist noch nicht auf dem iPhone durchgeführt worden — das gilt seit M7 auch
+> für den geänderten, gruppierten Export ([`docs/KURZBEFEHL.md`](docs/KURZBEFEHL.md)) —, und die
+> Etiketten aus M5 sind noch nicht gedruckt, gemessen und gescannt
+> ([`ops/ETIKETTEN.md`](ops/ETIKETTEN.md)).
 > Anforderungen und Rahmen: [`docs/PROJEKT-PROMPT.md`](docs/PROJEKT-PROMPT.md).
 > Architektur, Datenmodell, Meilensteine, Risiken: [`docs/PLAN.md`](docs/PLAN.md).
 
@@ -46,7 +48,7 @@ abhakbare Checkliste in Apple Notes holt.
 | M4 | Einkaufsliste & Apple-Notes-Export | erledigt — iPhone-Verifikation des Kurzbefehls steht aus |
 | M5 | Etiketten (Einzel-QR + Druckbögen) | erledigt — Testdruck, Messung und Scanprobe stehen aus |
 | M6 | Deployment auf dem Raspberry Pi | offen |
-| M7 | Kategorien & Ladenzuordnung | offen |
+| M7 | Kategorien & Ladenzuordnung | erledigt — iPhone-Verifikation des geänderten Exports steht aus |
 | M8 | Verbrauchshistorie & Prognose | offen |
 | M9 | Backup & Restore | offen |
 

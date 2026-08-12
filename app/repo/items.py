@@ -137,6 +137,8 @@ def update(
     reorder_level: int,
     target_stock: int,
     pack_size: int,
+    category_id: int | None,
+    store_id: int | None,
     updated_at: str,
 ) -> None:
     """Ändert Stammdaten. `stock` ist absichtlich nicht dabei — Bestand ändert sich nur über
@@ -146,10 +148,21 @@ def update(
         """
         UPDATE items
         SET name = ?, unit = ?, note = ?, reorder_level = ?, target_stock = ?, pack_size = ?,
-            updated_at = ?
+            category_id = ?, store_id = ?, updated_at = ?
         WHERE id = ?
         """,
-        (name, unit, note, reorder_level, target_stock, pack_size, updated_at, item_id),
+        (
+            name,
+            unit,
+            note,
+            reorder_level,
+            target_stock,
+            pack_size,
+            category_id,
+            store_id,
+            updated_at,
+            item_id,
+        ),
     )
 
 
