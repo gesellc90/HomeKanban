@@ -8,7 +8,7 @@ import re
 from pathlib import Path
 
 TEMPLATES_DIR = Path(__file__).resolve().parent.parent.parent / "app" / "templates"
-STATIC_CSS = Path(__file__).resolve().parent.parent.parent / "app" / "static" / "app.css"
+STATIC_DIR = Path(__file__).resolve().parent.parent.parent / "app" / "static"
 
 _EXTERNAL_URL = re.compile(r"""(https?:)?//[^"'\s)]+""")
 
@@ -26,7 +26,15 @@ def test_no_template_references_an_external_host() -> None:
     assert offenders == [], f"Externe URLs in Templates gefunden: {offenders}"
 
 
-def test_stylesheet_references_no_external_host() -> None:
-    text = STATIC_CSS.read_text(encoding="utf-8")
-    matches = _EXTERNAL_URL.findall(text)
-    assert matches == [], f"Externe URLs in app.css gefunden: {matches}"
+def test_no_stylesheet_references_an_external_host() -> None:
+    """Alle Stylesheets, nicht nur `app.css` — seit M5 gibt es zusätzlich `labels-print.css`."""
+    stylesheets = sorted(STATIC_DIR.glob("*.css"))
+    assert stylesheets, "es sollte mindestens ein Stylesheet geben"
+
+    offenders = []
+    for path in stylesheets:
+        text = path.read_text(encoding="utf-8")
+        for match in _EXTERNAL_URL.finditer(text):
+            offenders.append(f"{path.name}: {match.group(0)}")
+
+    assert offenders == [], f"Externe URLs in einem Stylesheet gefunden: {offenders}"

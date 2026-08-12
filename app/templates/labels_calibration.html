@@ -1,0 +1,75 @@
+{# Maßstabskontrolle vor dem Etikettendruck (docs/PLAN.md §7, M5).
+
+   Diese Seite ist die Absicherung, auf der ADR 0004 aufbaut: Ohne sie ist der Browserdruck ein
+   Blindflug — ein Druckertreiber, der stillschweigend auf 94 % skaliert, verschiebt jedes Etikett
+   des Bogens. Wie die Bogenansicht steht sie ohne `base.html`, damit gedruckt wird, was hier
+   steht, und nichts sonst. #}
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Kalibrierung – HomeKanban</title>
+    <link rel="stylesheet" href="/static/labels-print.css" />
+  </head>
+  <body>
+    <div class="toolbar">
+      <a class="toolbar__link" href="/etiketten">← Zurück zur Auswahl</a>
+      <span class="toolbar__hint">
+        Diese Seite ausdrucken und die Strecke mit einem Lineal nachmessen.
+      </span>
+      <button type="button" class="toolbar__button" onclick="window.print()">Drucken</button>
+    </div>
+
+    <div class="calibration">
+      <h1>Druck kalibrieren</h1>
+
+      <p>
+        Der Etikettenbogen wird in Millimetern gesetzt. Ob diese Millimeter auch auf dem Papier
+        ankommen, entscheidet der Druckdialog — nicht die App. Diese Seite prüft das in einem
+        Schritt.
+      </p>
+
+      <p><strong>Die Strecke zwischen den beiden Enden ist genau 100 mm lang.</strong></p>
+
+      <div class="calibration__ruler"></div>
+      <div class="calibration__scale">
+        <span>0 cm</span>
+        <span>10 cm</span>
+      </div>
+
+      <h2>So geht's</h2>
+      <ol>
+        <li>Diese Seite ausdrucken — auf demselben Drucker und mit demselben Papierformat (A4),
+          mit dem später auch die Etiketten gedruckt werden.</li>
+        <li>Die Strecke oben mit einem Lineal nachmessen.</li>
+        <li>
+          Kommen <strong>100 mm</strong> heraus, ist alles richtig eingestellt. Der Etikettenbogen
+          kann gedruckt werden.
+        </li>
+      </ol>
+
+      <h2>Wenn die Länge abweicht</h2>
+      <p>Dann skaliert der Druckdialog. Im Druckfenster einstellen:</p>
+      <ol>
+        <li><strong>Skalierung auf 100 %</strong> setzen (nicht „Automatisch“).</li>
+        <li>
+          <strong>„An Seite anpassen“ / „Fit to page“ / „Seitenanpassung“ ausschalten.</strong>
+          Das ist in den allermeisten Fällen die Ursache — es verkleinert typischerweise auf
+          94 bis 96 %.
+        </li>
+        <li>Als Papierformat <strong>A4</strong> wählen, nicht Letter.</li>
+        <li>Ränder auf <strong>keine</strong> beziehungsweise das Minimum stellen.</li>
+        <li>Danach diese Seite erneut drucken und noch einmal messen.</li>
+      </ol>
+
+      <p class="calibration__note">
+        <strong>Erst messen, dann kleben.</strong> Ein Bogen, der um 5 % zu klein gedruckt wird,
+        verschiebt sich über die Blatthöhe um mehr als einen Zentimeter — die unteren Etiketten
+        liegen dann quer über der Stanzung. Ein Blatt Normalpapier zum Probedruck über den
+        Etikettenbogen halten und gegen das Licht prüfen, ob die Kästen auf der Stanzung liegen,
+        kostet eine Minute und spart einen Bogen.
+      </p>
+    </div>
+  </body>
+</html>
