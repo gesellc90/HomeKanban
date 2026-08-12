@@ -216,7 +216,10 @@ section {
 }
 
 .item-form input,
-.item-form textarea {
+.item-form textarea,
+.item-form select,
+.taxonomy-form input,
+.taxonomy-form select {
   min-height: var(--tap-min);
   padding: 0.5rem 0.6rem;
   border: 1px solid var(--color-border);
@@ -418,6 +421,18 @@ section {
   margin: 0 0 var(--gap);
 }
 
+.list-group {
+  margin-bottom: var(--gap);
+}
+
+.list-group__label {
+  font-size: 1rem;
+  color: var(--color-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 0 0 0.5rem;
+}
+
 .list-lines {
   list-style: none;
   margin: 0;
@@ -614,4 +629,77 @@ section {
   align-items: center;
   font-weight: 600;
   cursor: pointer;
+}
+
+/* Pflegeseiten für Kategorien und Läden (docs/PLAN.md §7, M7). */
+
+.taxonomy-hint {
+  color: var(--color-muted);
+  font-size: 0.9rem;
+  margin: 0 0 var(--gap);
+}
+
+.taxonomy-form--create {
+  flex-direction: row;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  margin-bottom: var(--gap);
+}
+
+.taxonomy-form--create label {
+  width: 100%;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.taxonomy-form--create input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.taxonomy-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.taxonomy-list__item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  flex-wrap: wrap;
+}
+
+.taxonomy-list__rename {
+  flex: 1 1 auto;
+  flex-direction: row;
+  margin: 0;
+  min-width: 0;
+}
+
+.taxonomy-list__rename input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.taxonomy-list__order {
+  display: flex;
+  gap: 0.25rem;
+  flex: 0 0 auto;
+}
+
+.taxonomy-list__order .button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.taxonomy-list__empty {
+  color: var(--color-muted);
 }

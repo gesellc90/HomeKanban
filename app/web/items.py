@@ -22,12 +22,16 @@ from app.domain.validation import ItemInput, validate_item
 from app.repo import items as items_repo
 from app.repo import movements as movements_repo
 from app.repo import shopping_lists as shopping_lists_repo
+from app.repo import taxonomy as taxonomy_repo
 from app.services import stock as stock_service
 from app.web.templating import templates
 
 router = APIRouter()
 
 _DUPLICATE_NAME_MARKER = "items.name"
+
+# Formularwert für "(keine)" bei Kategorie/Laden — kein Zahlenwert, kein Fremdschlüssel.
+_NO_TAXONOMY_VALUE = ""
 
 
 def _duplicate_name_message(name: str) -> str:
@@ -42,6 +46,8 @@ class _ItemFormValues:
     reorder_level: int
     target_stock: int
     pack_size: int
+    category_id: int | None = None
+    store_id: int | None = None
     stock: int = 0
 
 
@@ -59,15 +65,49 @@ def _form_values_from_item(item: items_repo.ItemRow) -> _ItemFormValues:
         reorder_level=item.reorder_level,
         target_stock=item.target_stock,
         pack_size=item.pack_size,
+        category_id=item.category_id,
+        store_id=item.store_id,
         stock=item.stock,
     )
 
 
+def _taxonomy_form_context(connection: sqlite3.Connection) -> dict[str, Any]:
+    """Kategorien und Läden für die Auswahlfelder — leere Liste ist kein Fehler, nur "(keine)"."""
+    return {
+        "categories": taxonomy_repo.list_all(connection, "categories"),
+        "stores": taxonomy_repo.list_all(connection, "stores"),
+    }
+
+
+def _parse_taxonomy_id(
+    connection: sqlite3.Connection, table: taxonomy_repo.TableName, raw: str
+) -> tuple[int | None, str | None]:
+    """Liest ein Auswahlfeld für Kategorie/Laden. `(keine)` (leerer Wert) ist gültig.
+
+    Liefert `(id, error)` — bei unbekannter ID ist `id` `None` und `error` die deutsche Meldung,
+    damit ein manipuliertes Formular (fremde ID) nie in einem Fremdschlüsselfehler der Datenbank
+    endet.
+    """
+    stripped = raw.strip()
+    if stripped == _NO_TAXONOMY_VALUE:
+        return None, None
+    try:
+        entry_id = int(stripped)
+    except ValueError:
+        label = "Kategorie" if table == "categories" else "Laden"
+        return None, f"Unbekannte {label}-Auswahl."
+    if taxonomy_repo.get_by_id(connection, table, entry_id) is None:
+        label = "Kategorie" if table == "categories" else "Laden"
+        return None, f"Unbekannte {label}-Auswahl."
+    return entry_id, None
+
+
 @router.get("/artikel/neu", response_class=HTMLResponse)
 def new_item_form(request: Request) -> HTMLResponse:
-    return templates.TemplateResponse(
-        request, "item_new.html", {"values": _new_form_defaults(), "errors": []}
-    )
+    connection = request.app.state.db
+    context: dict[str, Any] = {"values": _new_form_defaults(), "errors": []}
+    context.update(_taxonomy_form_context(connection))
+    return templates.TemplateResponse(request, "item_new.html", context)
 
 
 @router.post("/artikel", response_model=None)
@@ -80,12 +120,16 @@ def create_item(
     reorder_level: int = Form(...),
     target_stock: int = Form(...),
     pack_size: int = Form(1),
+    category_id: str = Form(""),
+    store_id: str = Form(""),
 ) -> HTMLResponse | RedirectResponse:
     connection = request.app.state.db
 
     clean_name = name.strip()
     clean_unit = unit.strip()
     clean_note = note.strip() or None
+    resolved_category_id, category_error = _parse_taxonomy_id(connection, "categories", category_id)
+    resolved_store_id, store_error = _parse_taxonomy_id(connection, "stores", store_id)
     values = _ItemFormValues(
         name=clean_name,
         unit=clean_unit,
@@ -93,6 +137,8 @@ def create_item(
         reorder_level=reorder_level,
         target_stock=target_stock,
         pack_size=pack_size,
+        category_id=resolved_category_id,
+        store_id=resolved_store_id,
         stock=stock,
     )
 
@@ -107,10 +153,11 @@ def create_item(
             note=clean_note,
         )
     )
+    errors.extend(error for error in (category_error, store_error) if error is not None)
     if errors:
-        return templates.TemplateResponse(
-            request, "item_new.html", {"values": values, "errors": errors}, status_code=422
-        )
+        context: dict[str, Any] = {"values": values, "errors": errors}
+        context.update(_taxonomy_form_context(connection))
+        return templates.TemplateResponse(request, "item_new.html", context, status_code=422)
 
     try:
         item_id = stock_service.create_item(
@@ -121,6 +168,8 @@ def create_item(
             reorder_level=reorder_level,
             target_stock=target_stock,
             pack_size=pack_size,
+            category_id=resolved_category_id,
+            store_id=resolved_store_id,
             note=clean_note,
             position=items_repo.next_position(connection),
             source="board",
@@ -128,12 +177,9 @@ def create_item(
     except sqlite3.IntegrityError as error:
         if _DUPLICATE_NAME_MARKER not in str(error):
             raise
-        return templates.TemplateResponse(
-            request,
-            "item_new.html",
-            {"values": values, "errors": [_duplicate_name_message(clean_name)]},
-            status_code=422,
-        )
+        context = {"values": values, "errors": [_duplicate_name_message(clean_name)]}
+        context.update(_taxonomy_form_context(connection))
+        return templates.TemplateResponse(request, "item_new.html", context, status_code=422)
 
     return RedirectResponse(f"/artikel/{item_id}", status_code=303)
 
@@ -193,6 +239,7 @@ def _render_detail(
         # (docs/PLAN.md §9, M3, Punkt 6).
         "scan_url": f"{base_url}/e/{item.qr_token}",
     }
+    context.update(_taxonomy_form_context(connection))
     return templates.TemplateResponse(request, "item_detail.html", context, status_code=status_code)
 
 
@@ -212,6 +259,8 @@ def update_item(
     reorder_level: int = Form(...),
     target_stock: int = Form(...),
     pack_size: int = Form(1),
+    category_id: str = Form(""),
+    store_id: str = Form(""),
 ) -> HTMLResponse | RedirectResponse:
     connection = request.app.state.db
     _require_item(connection, item_id)
@@ -219,6 +268,8 @@ def update_item(
     clean_name = name.strip()
     clean_unit = unit.strip()
     clean_note = note.strip() or None
+    resolved_category_id, category_error = _parse_taxonomy_id(connection, "categories", category_id)
+    resolved_store_id, store_error = _parse_taxonomy_id(connection, "stores", store_id)
     submitted_values = _ItemFormValues(
         name=clean_name,
         unit=clean_unit,
@@ -226,6 +277,8 @@ def update_item(
         reorder_level=reorder_level,
         target_stock=target_stock,
         pack_size=pack_size,
+        category_id=resolved_category_id,
+        store_id=resolved_store_id,
     )
 
     errors = validate_item(
@@ -238,6 +291,7 @@ def update_item(
             note=clean_note,
         )
     )
+    errors.extend(error for error in (category_error, store_error) if error is not None)
     if errors:
         return _render_detail(
             request,
@@ -258,6 +312,8 @@ def update_item(
             reorder_level=reorder_level,
             target_stock=target_stock,
             pack_size=pack_size,
+            category_id=resolved_category_id,
+            store_id=resolved_store_id,
             updated_at=stock_service.utc_now_iso(),
         )
     except sqlite3.IntegrityError as error:

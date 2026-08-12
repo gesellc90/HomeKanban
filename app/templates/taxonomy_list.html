@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} – HomeKanban{% endblock %}
+{% block content %}
+  <a class="back-link" href="/">← Zurück zum Board</a>
+  <h1>{{ title }}</h1>
+  <p class="taxonomy-hint">
+    Die Reihenfolge bestimmt später den Weg der Einkaufsliste durch den Laden.
+  </p>
+
+  {% if errors %}
+    <ul class="form-errors">
+      {% for error in errors %}<li>{{ error }}</li>{% endfor %}
+    </ul>
+  {% endif %}
+
+  <form method="post" action="{{ base_path }}" class="taxonomy-form taxonomy-form--create">
+    <label for="name">Neue {{ label }}</label>
+    <input id="name" name="name" type="text" required value="{{ new_name }}" />
+    <button type="submit" class="button button--primary">Anlegen</button>
+  </form>
+
+  {% if entries %}
+    <ul class="taxonomy-list">
+      {% for entry in entries %}
+        <li class="taxonomy-list__item">
+          <form method="post" action="{{ base_path }}/{{ entry.id }}" class="taxonomy-form taxonomy-list__rename">
+            <input type="text" name="name" required value="{{ entry.name }}" aria-label="Name" />
+            <button type="submit" class="button">Speichern</button>
+          </form>
+          <div class="taxonomy-list__order">
+            <form method="post" action="{{ base_path }}/{{ entry.id }}/hoch">
+              <button
+                type="submit"
+                class="button"
+                {% if loop.first %}disabled{% endif %}
+                aria-label="{{ entry.name }} nach oben"
+              >↑</button>
+            </form>
+            <form method="post" action="{{ base_path }}/{{ entry.id }}/runter">
+              <button
+                type="submit"
+                class="button"
+                {% if loop.last %}disabled{% endif %}
+                aria-label="{{ entry.name }} nach unten"
+              >↓</button>
+            </form>
+          </div>
+          <form
+            method="post"
+            action="{{ base_path }}/{{ entry.id }}/loeschen"
+            class="inline-form"
+            onsubmit="return confirm('{{ entry.name }} wirklich löschen?');"
+          >
+            <button type="submit" class="button button--danger">Löschen</button>
+          </form>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="taxonomy-list__empty">Noch keine {{ title }} angelegt.</p>
+  {% endif %}
+{% endblock %}

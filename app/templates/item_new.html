@@ -60,6 +60,26 @@
       value="{{ values.pack_size }}"
     />
 
+    <label for="category_id">Kategorie</label>
+    <select id="category_id" name="category_id">
+      <option value="" {% if values.category_id is none %}selected{% endif %}>(keine)</option>
+      {% for category in categories %}
+        <option value="{{ category.id }}" {% if values.category_id == category.id %}selected{% endif %}>
+          {{ category.name }}
+        </option>
+      {% endfor %}
+    </select>
+
+    <label for="store_id">Laden</label>
+    <select id="store_id" name="store_id">
+      <option value="" {% if values.store_id is none %}selected{% endif %}>(keine)</option>
+      {% for store in stores %}
+        <option value="{{ store.id }}" {% if values.store_id == store.id %}selected{% endif %}>
+          {{ store.name }}
+        </option>
+      {% endfor %}
+    </select>
+
     <label for="note">Notiz</label>
     <textarea id="note" name="note" rows="2">{{ values.note }}</textarea>
 
