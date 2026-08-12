@@ -5,7 +5,9 @@ verbindliche Referenz für Architektur, Datenmodell und Meilensteine. Weicht die
 sie im selben Pull Request nachgezogen.
 
 **Stand:** M0 (Fundament & Entscheidungen) umgesetzt. M1 (Domänenmodell & Persistenz) umgesetzt.
-M2 (Board & Artikelpflege) umgesetzt. M3 (QR-Entnahme-Flow) umgesetzt.
+M2 (Board & Artikelpflege) umgesetzt. M3 (QR-Entnahme-Flow) umgesetzt. M4 (Einkaufsliste &
+Apple-Notes-Export) umgesetzt — mit einem ausstehenden Punkt: die Durchführung des Kurzbefehls
+auf dem iPhone (§9, M4).
 
 ---
 
@@ -240,8 +242,18 @@ Regeln, jede einzeln getestet:
    Artikel ist bereits eingeplant und soll nicht doppelt in der Liste stehen).
 4. Archivierte Artikel erscheinen nirgends.
 5. **Teilkauf:** Ist der Bestand nach dem Abhaken weiter `<= reorder_level`, fällt der Artikel
-   sofort zurück auf **NACHKAUFEN** und erhält beim nächsten Abgleich eine neue Position mit dem
-   Rest. Das ist der Fall „nur eine statt zwei Packungen bekommen“.
+   sofort zurück auf **NACHKAUFEN**. Das ist der Fall „nur eine statt zwei Packungen bekommen“.
+   Die Restmenge kommt mit der **nächsten** Liste — nicht als zweite Position in der laufenden.
+
+   > **Präzisiert in M4.** Ursprünglich stand hier „erhält beim nächsten Abgleich eine neue
+   > Position mit dem Rest“. Das ist mit dem Schema aus §3 nicht vereinbar:
+   > `ux_shopping_list_lines_active` lässt je Liste höchstens **eine nicht verworfene** Position
+   > pro Artikel zu, und eine *abgehakte* Position hat `dropped_at IS NULL`, zählt also mit. Eine
+   > zweite Position in derselben Liste liefe in einen `IntegrityError`. Entschieden (ADR 0006):
+   > Der Abgleich fügt nur für Artikel an, die in der offenen Liste **keine nicht verworfene**
+   > Position haben. Der teilweise gekaufte Artikel steht sofort wieder in NACHKAUFEN und ist
+   > beim ersten Abgleich nach „Einkauf abschließen“ automatisch wieder dabei. Das hält §6
+   > („Abgehakte Positionen bleiben unverändert stehen“) ein und kommt ohne Migration aus.
 
 **Nachkaufmenge:** `ceil((target_stock - stock) / pack_size) * pack_size`, mindestens `pack_size`.
 Beispiele, die als Testtabelle in `tests/domain/` landen:
@@ -299,11 +311,23 @@ Bestand zwischenzeitlich geändert, wird nicht stillschweigend überschrieben, s
 
 Bei „Einkaufsliste erzeugen“ und bei jedem Export läuft derselbe Abgleich gegen die offene Liste:
 
-- Artikel in **NACHKAUFEN** ohne Position → Position wird angefügt.
+- Artikel unter der Schwelle **ohne nicht verworfene Position** → Position wird angefügt.
+  (Eine *abgehakte* Position zählt dabei mit und verhindert das Anfügen — siehe §4 Regel 5 und
+  ADR 0006.)
 - Position, deren Artikel nicht mehr unter der Schwelle liegt und die **nicht** abgehakt ist →
   `dropped_at` wird gesetzt.
 - Abgehakte Positionen bleiben unverändert stehen.
-- `suggested_qty` wird für offene Positionen neu berechnet.
+- `suggested_qty` wird für offene Positionen neu berechnet — und nur dann geschrieben, wenn sich
+  der Wert tatsächlich ändert (unnötige Schreibzugriffe auf die SD-Karte, R5).
+- **Position, deren Artikel inzwischen archiviert wurde** und die nicht abgehakt ist → `dropped_at`
+  wird gesetzt. Dieser fünfte Fall stand ursprünglich nicht hier; ohne ihn bliebe eine Karteileiche
+  in der Liste stehen, obwohl §4 Regel 4 verlangt, dass archivierte Artikel nirgends erscheinen.
+
+Die Entscheidung, *was* zu tun ist, liegt als reine Logik in `app/domain/shopping.py`
+(`plan_reconciliation`); `app/services/shopping.py` führt das Ergebnis in **einer** Transaktion
+aus. Höchstens eine offene Liste erzwingt `ux_shopping_lists_one_open`; zwei gleichzeitige
+„Liste erzeugen“ werden nach dem Muster aus ADR 0005 behandelt (vorher nachsehen, `IntegrityError`
+abfangen, danach erneut nachschlagen) statt in eine 500er-Seite zu laufen.
 
 Damit beantwortet sich die Frage aus dem Prompt, was bei einer zweiten Exportanfrage passiert: Es
 gibt nie zwei konkurrierende Listen, sondern eine Liste, die den aktuellen Bedarf zeigt.
@@ -322,6 +346,28 @@ Wochen.
 - in beiden Fällen: eine `restock`-Bewegung mit `source = 'shopping_list'` und `line_id`, in einer
   Transaktion mit dem Setzen von `checked_at`
 - Rücknahme („doch nicht gekauft“) erzeugt die Gegenbewegung und leert `checked_at`
+
+Drei Punkte, die in M4 dazugekommen sind:
+
+- **Liegt der Bestand ohne Mengenangabe bereits bei oder über `target_stock`** — jemand hat
+  zwischenzeitlich eine Inventur gemacht oder spontan nachgekauft —, gibt es nichts zu buchen.
+  Die Position wird abgehakt, aber **keine** Bewegung geschrieben; ein Zugang mit `delta <= 0`
+  wäre eine Lüge im Journal, und `restock()` lehnt `quantity <= 0` ohnehin ab. Die Oberfläche
+  sagt das in einem Hinweis an der Zeile.
+- **Doppeltes Abhaken bucht nicht doppelt.** Der Schutz ist ein bedingtes `UPDATE`
+  (`WHERE checked_at IS NULL AND dropped_at IS NULL`) in derselben Transaktion wie die Buchung,
+  nicht eine Vorabprüfung. Ein aus der `line_id` abgeleiteter `idempotency_key` wäre hier falsch:
+  Er würde nach „abhaken → zurücknehmen → erneut abhaken“ kollidieren und die zweite, völlig
+  legitime Buchung verschlucken.
+- **Die Rücknahme kennt kein Zeitfenster.** Das Undo-Fenster aus §5 gehört zum QR-Flow, wo es
+  einen Fehlgriff auffängt. „Doch nicht gekauft“ beim abendlichen Einräumen ist legitim und darf
+  nicht am Fenster scheitern. `services/shopping.py` benutzt deshalb nicht `stock.undo()`, sondern
+  den gemeinsamen Buchungskern `stock.book_reversal()` — die Gegenbewegung mit
+  `reverts_movement_id` (L3) entsteht identisch, nur ohne Fensterprüfung.
+
+**„Alles gekauft“** (O1, R2) hakt alle offenen Positionen in einem Zug ab, jede in ihrer eigenen
+kurzen Transaktion (R7). Positionen, die zwischenzeitlich von jemand anderem abgehakt oder
+verworfen wurden, werden übersprungen statt zum Fehler zu führen.
 
 ### Export-Schnittstelle für den Kurzbefehl
 
@@ -342,6 +388,27 @@ Spülmaschinentabs — 1 Packung
 Klopapier — 10 Rollen
 Kaffee — 2 Packungen
 ```
+
+Aufbau der Zeile: `name_snapshot` + ` — ` (Geviertstrich mit Leerzeichen) + Menge + Einheit.
+Benutzt werden `name_snapshot`/`unit_snapshot`, nicht der Live-Artikelname (§3).
+
+**Plural (präzisiert in M4).** Gespeichert ist `unit` im Singular („Rolle“, „Packung“), das
+Beispiel oben zeigt den Plural. Aufgelöst wird das durch eine kleine, rein deutsche Pluralregel in
+`app/domain/pluralization.py`: eine Ausnahmetabelle für die im Haushalt vorkommenden Einheiten,
+davor ein paar verlässliche Endungsregeln (`-ung` → `-ungen`, `-e` → `-en`, `-el/-er/-en`
+unverändert). Bei genau `1` bleibt der Singular stehen. Eine **unbekannte** Einheit bleibt
+unverändert statt geraten zu werden — höchstens eine schiefe Zahlenangabe, nie ein erfundenes
+Wort; neue Einheiten gehören in die Ausnahmetabelle. Eine zweite Spalte am Artikel wäre eine
+Schemaänderung für Kosmetik gewesen und wurde verworfen.
+
+Der Text endet **ohne** abschließenden Zeilenumbruch — der Kurzbefehl teilt an Zeilenumbrüchen,
+ein Umbruch am Ende ergäbe einen leeren Punkt in der Notiz. Ist nichts zu kaufen, ist die Antwort
+leer: ein gültiges Ergebnis, kein Fehler.
+
+Ist `HOMEKANBAN_API_KEY` nicht gesetzt, antwortet der Endpunkt mit `503` und schreibt den Grund
+ins Log — das ist ein Konfigurationsfehler des Betreibers (§8), keine fehlgeschlagene
+Authentifizierung, und darf nicht als `401` erscheinen. Der Schlüsselvergleich läuft zeitkonstant
+(`secrets.compare_digest`).
 
 ### Der Kurzbefehl (`docs/KURZBEFEHL.md`, entsteht in M4)
 
@@ -379,6 +446,7 @@ englischen.
 | GET | `/liste` | offene Liste zum Abhaken | 4 |
 | POST | `/liste/erzeugen` | Abgleich, Liste anlegen falls nötig | 4 |
 | POST | `/liste/{id}/zeilen/{line_id}/abhaken` · `/zuruecknehmen` | HTMX-Partial der Zeile | 4 |
+| POST | `/liste/{id}/alles-gekauft` | alle offenen Positionen buchen (O1, R2) | 4 |
 | POST | `/liste/{id}/abschliessen` | offene Positionen verwerfen, Liste schließen | 4 |
 | GET | `/api/shopping-list` | lesen, `text` oder `json`, API-Key | 4 |
 | POST | `/api/shopping-list/export` | Abgleich + Export für den Kurzbefehl | 4 |
@@ -389,6 +457,13 @@ englischen.
 | GET | `/healthz` | Bereitschaft **und** Invariantenprüfung `SUM(delta) == stock` | 0 |
 | GET | `/kategorien` · `/laeden` (+ POST) | Taxonomie pflegen | 7 |
 | GET | `/verlauf` · `/artikel/{id}/verlauf` | Journal, Verbrauchsrate, Reichweite | 8 |
+
+**Zum HTMX-Partial (ab M4):** Abhaken und Zurücknehmen antworten nur dann mit dem Zeilen-Partial,
+wenn der Header `HX-Request` gesetzt ist; ohne JavaScript sendet der Browser das darunterliegende
+`<form method="post">` normal ab und bekommt `303 See Other` auf `/liste`. Die Seite bleibt damit
+ohne JavaScript vollständig bedienbar. Fehlbedienung antwortet mit `409`/`422`; damit HTMX solche
+Antworten trotzdem einsetzt statt sie zu verwerfen, liegt in `app/static/app.js` ein
+`htmx:beforeSwap`-Handler — die einzige eigene JavaScript-Datei, lokal ausgeliefert.
 
 ---
 
@@ -485,6 +560,11 @@ nach Ablauf des Fensters, Bestand vor/nach `GET` unverändert, Token nicht errat
 
 ### M4 — Einkaufsliste und Apple-Notes-Export
 
+**Status:** erledigt — **mit einem ausstehenden Punkt:** Der Kurzbefehl ist noch nicht auf dem
+iPhone durchgeführt worden. Das kann keine lokale Testsuite abdecken (§6); die Anleitung dazu
+steht in [`KURZBEFEHL.md`](KURZBEFEHL.md). Bis dahin ist auch R1 (Checklisten-Formatierung in
+Apple Notes) unverifiziert. Alles andere aus der Definition of Done ist umgesetzt und getestet.
+
 **Ziel:** Vom Bedarf zur abhakbaren Liste im iPhone und zurück zum Bestand.
 **Drin:** Abgleichlogik (§6), Listenansicht mit HTMX-Abhaken, abweichende Mengen, Abschließen,
 `GET`- und `POST`-Schnittstelle mit API-Key, `docs/KURZBEFEHL.md`.
@@ -580,17 +660,51 @@ Richtige, Import lehnt kaputte Dateien ab, ohne bestehende Daten anzufassen.
 | R4 | **Kollision mit „Hängt!“** über Port, Hostname oder Speicher. | Im schlimmsten Fall steht die bestehende App. | Eigener Container, eigenes Volume, Port aus `.env` mit Prüfschritt in M6, Speicherlimit im Compose. Vor dem ersten Start zu klären (A1). |
 | R5 | **SD-Karten-Ausfall.** | Totalverlust von Historie und Stammdaten. | WAL, `synchronous=NORMAL`, keine Logs auf die Karte, M9 mit geprüftem Restore, Backup-Ziel außerhalb des Pi. Empfehlung: Systemlaufwerk auf USB-SSD. |
 | R6 | **`BASE_URL` ändert sich** nach dem Etikettendruck. | Alle geklebten QR-Codes zeigen ins Nichts. | Hostname statt IP (§8), `BASE_URL` als Pflichtentscheidung vor M5, in `BETRIEB.md` als „nicht ohne Neudruck ändern“ vermerkt. Erwägenswert: eine Weiterleitung, die alte Basis-URLs toleriert. |
-| R7 | **Gleichzeitige Schreibzugriffe** auf SQLite. | `database is locked` mitten im Scan. | WAL, `busy_timeout=5000`, kurze Transaktionen, keine Transaktion über einen Render-Vorgang hinweg. In M6 mit zwei Geräten geprüft. |
+| R7 | **Gleichzeitige Schreibzugriffe** auf SQLite. | `database is locked` mitten im Scan. | WAL, `busy_timeout=5000`, kurze Transaktionen, keine Transaktion über einen Render-Vorgang hinweg. In M6 mit zwei Geräten geprüft. **Offener Defekt, siehe unten.** |
 | R8 | **Die App wird nach drei Wochen nicht mehr benutzt.** Das ist das eigentliche Projektrisiko. | Aufwand ohne Nutzen. | Zwei-Tap-Anspruch als Abnahmekriterium in M3, kein Login, früher Echtbetrieb ab M3 statt großer Fertigstellung, wenige Artikel zu Beginn (10–15 statt „alles“). |
 | R9 | **Etikettenpflege:** neue Artikel, abgefallene Aufkleber. | Löcher im System, gerade bei selten gekauften Dingen. | Nachdruck einzelner Etiketten aus der Detailansicht, `qr_token` bleibt bei Umbenennung stabil, Reservebogen im Vorratsschrank. |
+
+### Offener Defekt zu R7: eine Verbindung für alle Anfragen
+
+**Gefunden in M4, entstanden in M0/M3, noch nicht behoben — die Entscheidung gehört dir.**
+
+Die App hält **eine einzige** `sqlite3.Connection` in `app.state.db` und benutzt sie aus dem
+Threadpool von FastAPI, also aus mehreren Threads gleichzeitig. ADR 0005 sichert davon nur die
+*Transaktionen* ab (prozessweiter `threading.Lock` in `db.transaction()`). Lesende Zugriffe
+**außerhalb** einer Transaktion sind ungeschützt — zum Beispiel der Vorab-`SELECT` auf den
+Idempotenzschlüssel in `services/stock.py::withdraw`, oder jeder Lesezugriff beim Rendern.
+Trifft so ein Lesezugriff auf dasselbe Verbindungsobjekt, während ein anderer Thread mitten in
+einer Transaktion steckt, kann `sqlite3.InterfaceError: bad parameter or other API misuse`
+auftreten — im Alltag also eine 500er-Seite mitten im Scan, genau bei dem Fall, den R7 meint:
+zwei Haushaltsmitglieder buchen gleichzeitig.
+
+**Nachweis:** `tests/web/test_scan.py::TestConcurrentDoubleTap` (zwei gleichzeitige POSTs über
+denselben `TestClient`) schlägt sporadisch fehl — reproduziert auf unverändertem `main`, etwa
+einmal in zwölf Läufen, also unabhängig von M4. M4 fügt kein neues Muster hinzu, erbt die
+Anfälligkeit aber überall dort, wo vor einem Schreibzugriff gelesen wird.
+
+**Warum hier nicht behoben:** Die tragfähige Lösung ist eine Verbindung **je Thread** oder
+**je Anfrage** statt einer geteilten (SQLite regelt Gleichzeitigkeit zwischen getrennten
+Verbindungen über WAL, `busy_timeout` und `BEGIN IMMEDIATE` — genau der Weg, den ADR 0005 für
+den mehrprozessigen Fall bereits beschreibt und den die Nebenläufigkeitstests mit echten
+Verbindungen zuverlässig bestehen). Das ist ein Eingriff in `db.py`, `main.py` und die
+Verbindungsführung aller Router — eine Architekturentscheidung mit Abwägungen, keine Reparatur
+im Umfang von M4 (CLAUDE.md §4, kein Feature-Creep). Sie gehört nach M6, wo R7 ohnehin mit zwei
+Geräten geprüft wird, oder in einen eigenen `fix/`-Durchgang davor.
 
 ### Offene Fragen an dich
 
 | # | Frage | Empfehlung |
 | --- | --- | --- |
-| O1 | Wenn du mit der Notiz im Laden abhakst — soll die App danach nur „Alles gekauft“ anbieten, oder willst du wirklich Position für Position bestätigen? | „Alles gekauft“ als großer Standardweg, Einzelabhaken für Abweichungen. Sonst ist der Heimweg zu teuer (R2). |
 | O3 | Soll `HOMEKANBAN_LEAD_DAYS` global gelten oder pro Artikel? Klopapier hat eine andere Vorlaufzeit als Kaffee. | Erst global mit 7 Tagen; pro Artikel nur, wenn M8 zeigt, dass es nötig ist. |
 | O4 | Wer soll Artikel anlegen dürfen — alle im Haushalt oder nur du? | Alle. Ohne Login ist die Alternative ohnehin nur eine Bitte, und Archivieren ist reversibel. |
+
+**O1 — beantwortet (M4):** Beides, mit klarer Gewichtung. „Alles gekauft“ ist der große
+Standardweg oben auf `/liste` und bucht alle offenen Positionen in einem Zug auf ihren
+Sollbestand; darunter hat jede Position ein eigenes Häkchen und ein Mengenfeld für Abweichungen.
+Damit kostet der Heimweg im Normalfall einen Tap (R2), und der Kaffee-Fall aus Szenario 2 —
+nur eine statt zwei Packungen bekommen — bleibt ohne Umweg über die Inventur buchbar.
+Umgesetzt als `POST /liste/{id}/alles-gekauft` (§7).
 
 **O2 — beantwortet:** Der Pi ist im Heimnetz unter der festen Adresse `192.168.0.15` erreichbar;
 „Hängt!“ läuft aktuell **ohne** Reverse Proxy davor, ein Proxy ist im Projekt „Hängt!“ aber

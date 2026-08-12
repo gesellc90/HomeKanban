@@ -176,6 +176,79 @@ def withdraw(
     return movement_id
 
 
+def book_restock(
+    connection: sqlite3.Connection,
+    *,
+    item_id: int,
+    quantity: int,
+    source: str,
+    line_id: int | None = None,
+    idempotency_key: str | None = None,
+    note: str | None = None,
+    now: str | None = None,
+) -> int:
+    """Bucht einen Zugang **innerhalb einer bereits offenen Transaktion**.
+
+    Aufrufer, die selbst nichts weiter zu schreiben haben, nehmen `restock()`. Diesen Kern
+    braucht `app/services/shopping.py`: Dort gehört das Abhaken einer Position in dieselbe
+    Transaktion wie der Zugang (§6), und `transaction()` ist wegen des prozessweiten Locks
+    (ADR 0005) nicht wiedereintrittsfähig — ein `restock()` innerhalb einer offenen Transaktion
+    würde sich selbst blockieren.
+    """
+    if quantity <= 0:
+        raise ValueError("Zugangsmenge muss größer als 0 sein")
+
+    item = _require_item(connection, item_id)
+    new_stock = item.stock + quantity
+    timestamp = now or utc_now_iso()
+    movement_id = movements_repo.insert(
+        connection,
+        item_id=item_id,
+        kind="restock",
+        delta=quantity,
+        stock_after=new_stock,
+        source=source,
+        line_id=line_id,
+        idempotency_key=idempotency_key,
+        note=note,
+        created_at=timestamp,
+    )
+    items_repo.update_stock(connection, item_id, new_stock, timestamp)
+    return movement_id
+
+
+def book_reversal(
+    connection: sqlite3.Connection,
+    *,
+    movement: movements_repo.MovementRow,
+    source: str,
+    now: str | None = None,
+) -> int:
+    """Bucht die Gegenbewegung zu `movement` **innerhalb einer bereits offenen Transaktion**.
+
+    Bewusst **ohne** Prüfung des Undo-Fensters: Das Fenster gehört zum QR-Flow (§5), wo es einen
+    Fehlgriff auffangen soll. Die Rücknahme einer Listenposition („doch nicht gekauft“) ist etwas
+    anderes — sie darf Stunden nach dem Einkauf noch möglich sein. Die Fensterprüfung sitzt
+    deshalb in `undo()`, nicht hier.
+    """
+    item = _require_item(connection, movement.item_id)
+    new_stock = item.stock - movement.delta
+    timestamp = now or utc_now_iso()
+    reversal_id = movements_repo.insert(
+        connection,
+        item_id=movement.item_id,
+        kind=movement.kind,
+        delta=-movement.delta,
+        stock_after=new_stock,
+        source=source,
+        line_id=movement.line_id,
+        reverts_movement_id=movement.id,
+        created_at=timestamp,
+    )
+    items_repo.update_stock(connection, movement.item_id, new_stock, timestamp)
+    return reversal_id
+
+
 def restock(
     connection: sqlite3.Connection,
     *,
@@ -187,26 +260,16 @@ def restock(
     note: str | None = None,
 ) -> int:
     """Bucht einen Zugang. `quantity` ist die zugegangene Menge (positive Zahl)."""
-    if quantity <= 0:
-        raise ValueError("Zugangsmenge muss größer als 0 sein")
-
     with transaction(connection):
-        item = _require_item(connection, item_id)
-        new_stock = item.stock + quantity
-        now = utc_now_iso()
-        movement_id = movements_repo.insert(
+        movement_id = book_restock(
             connection,
             item_id=item_id,
-            kind="restock",
-            delta=quantity,
-            stock_after=new_stock,
+            quantity=quantity,
             source=source,
             line_id=line_id,
             idempotency_key=idempotency_key,
             note=note,
-            created_at=now,
         )
-        items_repo.update_stock(connection, item_id, new_stock, now)
     return movement_id
 
 
@@ -271,18 +334,5 @@ def undo(
                 f"Bewegung {movement_id} liegt außerhalb des {window_minutes}-Minuten-Fensters"
             )
 
-        item = _require_item(connection, movement.item_id)
-        new_stock = item.stock - movement.delta
-        now = utc_now_iso()
-        reversal_id = movements_repo.insert(
-            connection,
-            item_id=movement.item_id,
-            kind=movement.kind,
-            delta=-movement.delta,
-            stock_after=new_stock,
-            source=source,
-            reverts_movement_id=movement_id,
-            created_at=now,
-        )
-        items_repo.update_stock(connection, movement.item_id, new_stock, now)
+        reversal_id = book_reversal(connection, movement=movement, source=source)
     return reversal_id

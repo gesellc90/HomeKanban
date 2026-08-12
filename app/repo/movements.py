@@ -97,6 +97,31 @@ def find_reversal(connection: sqlite3.Connection, movement_id: int) -> MovementR
     return _row_to_movement(row) if row is not None else None
 
 
+def find_unreverted_for_line(connection: sqlite3.Connection, line_id: int) -> MovementRow | None:
+    """Die noch nicht zurückgenommene Buchung zu einer Listenposition (M4, §6).
+
+    Nur eine Buchung kann es zu einem Zeitpunkt geben: Abhaken bucht, Zurücknehmen bucht die
+    Gegenbewegung. Nach „abhaken → zurücknehmen → erneut abhaken“ liegen aber mehrere Bewegungen
+    an derselben `line_id`; gesucht ist die aktuell gültige. Ausgeschlossen werden deshalb
+    Gegenbewegungen selbst (`reverts_movement_id IS NOT NULL`) und bereits zurückgenommene
+    Buchungen (der LEFT JOIN findet ihre Gegenbewegung).
+    """
+    row = connection.execute(
+        """
+        SELECT m.*
+        FROM movements m
+        LEFT JOIN movements r ON r.reverts_movement_id = m.id
+        WHERE m.line_id = ?
+          AND m.reverts_movement_id IS NULL
+          AND r.id IS NULL
+        ORDER BY m.id DESC
+        LIMIT 1
+        """,
+        (line_id,),
+    ).fetchone()
+    return _row_to_movement(row) if row is not None else None
+
+
 def sum_delta_for_item(connection: sqlite3.Connection, item_id: int) -> int:
     row = connection.execute(
         "SELECT COALESCE(SUM(delta), 0) AS total FROM movements WHERE item_id = ?",
