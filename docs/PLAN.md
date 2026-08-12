@@ -8,7 +8,9 @@ sie im selben Pull Request nachgezogen.
 M2 (Board & Artikelpflege) umgesetzt. M3 (QR-Entnahme-Flow) umgesetzt. M4 (Einkaufsliste &
 Apple-Notes-Export) umgesetzt — mit einem ausstehenden Punkt: die Durchführung des Kurzbefehls
 auf dem iPhone (§9, M4). M5 (Etiketten) umgesetzt — ebenfalls mit einem ausstehenden Punkt:
-Testdruck, Messung der Kalibrierseite und Scanprobe am geklebten Etikett (§9, M5).
+Testdruck, Messung der Kalibrierseite und Scanprobe am geklebten Etikett (§9, M5). M7 (Kategorien
+& Ladenzuordnung) umgesetzt — der geänderte Export ist wie M4 noch nicht auf dem iPhone
+durchgespielt worden (§9, M7).
 
 ---
 
@@ -103,6 +105,7 @@ app/
     shopping.py           Abgleich der Einkaufsliste (plan_reconciliation)   (M4)
     pluralization.py      deutsche Pluralregel für Einheiten   (M4)
     labels.py             Etikettenraster, Rasterprüfung, Bogenaufteilung   (M5)
+    grouping.py           Sortierung/Gruppierung nach Laden und Kategorie   (M7)
     forecast.py           Verbrauchsrate, Reichweite, Schwellenvorschlag   (M8)
   repo/
     items.py  movements.py  shopping_lists.py  taxonomy.py
@@ -202,16 +205,23 @@ bestehende ab (§6).
 | `suggested_qty` | INTEGER | zum Zeitpunkt des Abgleichs berechnet |
 | `purchased_qty` | INTEGER NULL | tatsächlich gekauft, kann abweichen |
 | `name_snapshot`, `unit_snapshot` | TEXT | Kopie zum Erzeugungszeitpunkt |
+| `store_snapshot`, `category_snapshot` | TEXT NULL | Kopie von Laden-/Kategorienamen zum Anfügezeitpunkt (M7, `migrations/0002_…sql`, ADR 0007) |
+| `store_position_snapshot`, `category_position_snapshot` | INTEGER NULL | Kopie der `position` aus `stores`/`categories`, für die Sortierung ohne Live-Join (M7) |
 | `checked_at`, `dropped_at` | TEXT NULL | |
 | `position` | INTEGER | |
 
 Die Namenskopie ist Absicht: Wird ein Artikel umbenannt, während die Liste im Supermarkt offen ist,
-soll die Liste nicht plötzlich anders heißen.
+soll die Liste nicht plötzlich anders heißen. Ab M7 gilt dasselbe für Laden und Kategorie — siehe
+ADR 0007.
 
 ### `categories`, `stores`, `schema_migrations`
 
 `categories(id, name UNIQUE, position)` und `stores(id, name UNIQUE, position)` — die `position`
-bestimmt in M7 die Reihenfolge im Export, damit die Liste der Laufrichtung durch den Laden folgt.
+bestimmt seit M7 die Reihenfolge im Export, damit die Liste der Laufrichtung durch den Laden folgt.
+Löschen ist nur möglich, solange kein Artikel (auch kein archivierter) noch zugeordnet ist
+(`items.category_id`/`items.store_id` ohne `ON DELETE`); sonst eine deutsche Meldung mit der Zahl
+der betroffenen Artikel statt eines `IntegrityError` — kein Archivieren, keine `archived_at`-Spalte
+(M7, Frage 3 der Fragerunde, entschieden gegen die ursprüngliche Empfehlung).
 `schema_migrations(version PK, applied_at)`.
 
 ---
@@ -396,16 +406,33 @@ auslöst und protokolliert wird; ein `GET` mit Nebenwirkung wäre genau der Fehl
 Authentifizierung über Header `X-API-Key`; `?key=` wird zusätzlich akzeptiert, weil sich das in
 Kurzbefehlen leichter zusammenbauen lässt (L12).
 
-Textformat, eine Zeile pro Position, ab M7 mit Gruppenüberschrift:
+Textformat, eine Zeile pro Position, ab M7 gruppiert nach Laden (innerhalb nach
+Kategorie-Position), mit einer Gruppenüberschrift je Laden — entschieden in der M7-Fragerunde,
+Frage 2, gegen die ursprüngliche Empfehlung:
 
 ```
-Spülmaschinentabs — 1 Packung
+REWE
 Klopapier — 10 Rollen
+Aldi
 Kaffee — 2 Packungen
+Sonstiges
+Spülmaschinentabs — 1 Packung
 ```
+
+**Der Kurzbefehl kennt keine Überschriften** — er teilt den Text stur an Zeilenumbrüchen und
+hängt jede Zeile als eigenen Checklistenpunkt an. „REWE“ wird dadurch selbst zu einem abhakbaren
+Punkt. Bewusst in Kauf genommen: Die sichtbare Struktur im Laden wiegt schwerer als der eine
+überflüssige Haken je Gruppe (siehe `docs/KURZBEFEHL.md` Abschnitt 4). **Ausnahme:** Gibt es im
+ganzen Haushalt keine einzige Laden-/Kategoriezuordnung — die gesamte Liste landet dann in der
+einen Sammelgruppe „Sonstiges“ —, entfällt die Überschrift; sie hätte dort keinen Informationswert
+und wäre nur ein weiterer Pseudo-Punkt. Sobald mindestens ein echter Laden zugeordnet ist,
+erscheint auch „Sonstiges“ als eigene Gruppe mit Überschrift, damit unzugeordnete Artikel nicht
+zwischen den anderen verschwinden (Definition of Done, §9 M7). Das `json`-Format liefert dieselbe
+Gruppierung strukturiert unter `"groups"`, zusätzlich zur unveränderten flachen `"lines"`-Liste.
 
 Aufbau der Zeile: `name_snapshot` + ` — ` (Geviertstrich mit Leerzeichen) + Menge + Einheit.
-Benutzt werden `name_snapshot`/`unit_snapshot`, nicht der Live-Artikelname (§3).
+Benutzt werden `name_snapshot`/`unit_snapshot`, nicht der Live-Artikelname (§3) — Laden und
+Kategorie folgen demselben Prinzip über `store_snapshot`/`category_snapshot` (M7, ADR 0007).
 
 **Plural (präzisiert in M4).** Gespeichert ist `unit` im Singular („Rolle“, „Packung“), das
 Beispiel oben zeigt den Plural. Aufgelöst wird das durch eine kleine, rein deutsche Pluralregel in
@@ -470,7 +497,11 @@ englischen.
 | GET | `/etiketten/druck` | druckoptimierte Bogenansicht | 5 |
 | GET | `/etiketten/kalibrierung` | Maßstabskontrolle vor dem Druck | 5 |
 | GET | `/healthz` | Bereitschaft **und** Invariantenprüfung `SUM(delta) == stock` | 0 |
-| GET | `/kategorien` · `/laeden` (+ POST) | Taxonomie pflegen | 7 |
+| GET | `/kategorien` · `/laeden` | Taxonomie pflegen: Liste mit Formularen | 7 |
+| POST | `/kategorien` · `/laeden` | Anlegen | 7 |
+| POST | `/kategorien/{id}` · `/laeden/{id}` | Umbenennen | 7 |
+| POST | `…/{id}/hoch` · `…/{id}/runter` | Umsortieren (Nachbartausch, Grenze = No-Op) | 7 |
+| POST | `…/{id}/loeschen` | Löschen, nur ohne zugeordnete Artikel (Frage 3) | 7 |
 | GET | `/verlauf` · `/artikel/{id}/verlauf` | Journal, Verbrauchsrate, Reichweite | 8 |
 
 **Zum HTMX-Partial (ab M4):** Abhaken und Zurücknehmen antworten nur dann mit dem Zeilen-Partial,
@@ -657,13 +688,45 @@ unbeeinträchtigt weiter; ein zweites Haushaltsmitglied hat die App auf dem eige
 
 ### M7 — Kategorien und Ladenzuordnung
 
+**Status:** erledigt — **mit einem ausstehenden Punkt:** Der geänderte Export (Gruppenüberschriften
+im Textformat) ist wie schon in M4 noch nicht auf dem iPhone durchgespielt worden; `KURZBEFEHL.md`
+ist entsprechend aktualisiert, aber ungeprüft. Alles andere aus der Definition of Done ist
+umgesetzt und getestet.
+
 **Ziel:** Die Liste folgt dem Weg durch den Laden.
-**Drin:** Pflege von Kategorien und Läden mit Reihenfolge, Zuordnung im Artikel, Gruppierung im
-Board, Gruppierung und Sortierung in Ansicht und Export.
-**Abhängigkeiten:** M4. Die Datenfelder bestehen seit M1, deshalb ist hier kein Umbau nötig.
+**Drin:** Pflege von Kategorien und Läden mit Reihenfolge (`/kategorien`, `/laeden`), Zuordnung im
+Artikel, Gruppierung und Sortierung in `/liste` und im Export (`app/domain/grouping.py`).
+**Draußen (entschieden, siehe unten):** Gruppierung im Board — bleibt unverändert.
+**Abhängigkeiten:** M4. Die Datenfelder bestehen seit M1, deshalb war dafür kein Umbau nötig.
 **Definition of Done:** Export gruppiert nach Laden, innerhalb nach Kategorie-Position; Artikel
 ohne Zuordnung landen in „Sonstiges“ und verschwinden nicht.
 **Testfokus:** Sortierstabilität, Artikel ohne Kategorie, Laden löschen mit zugeordneten Artikeln.
+
+**In M7 entschieden** (Fragerunde mit dem Nutzer, CLAUDE.md §1):
+
+- **Frage 1 — Gruppierung aus Snapshot oder Live-Join:** Snapshot, konsistent mit §3
+  (`name_snapshot`/`unit_snapshot`). `shopping_list_lines` bekommt vier zusätzliche, additive
+  Spalten (`migrations/0002_shopping_list_taxonomy_snapshots.sql`): `store_snapshot`,
+  `store_position_snapshot`, `category_snapshot`, `category_position_snapshot`, gesetzt beim
+  Anfügen einer Position. Details und verworfene Alternative in ADR 0007 — als schwer umkehrbare
+  Schemaentscheidung mit eigenem ADR festgehalten, wie in der Aufgabenstellung verlangt.
+- **Frage 2 — Gruppenüberschriften im Kurzbefehl-Textexport:** Überschriftszeilen im Text (z. B.
+  „REWE“ als eigene Zeile) — gegen die ursprüngliche Empfehlung „nur Sortierung, keine
+  Überschriften“. Damit wird jede Gruppenüberschrift im Kurzbefehl zu einem abhakbaren
+  Pseudo-Punkt; das ist bewusst in Kauf genommen, weil die sichtbare Struktur im Laden schwerer
+  wiegt (siehe §6 oben und `docs/KURZBEFEHL.md` Abschnitt 4). Eine einzelne „Sonstiges“-Gruppe
+  (kein Laden im Haushalt zugeordnet) bekommt **keine** Überschrift, um nicht jede Liste ohne
+  gepflegte Taxonomie mit einem überflüssigen Punkt zu belasten.
+- **`KURZBEFEHL.md` wird im selben PR angepasst** — die Anleitung bleibt nicht bewusst stabil.
+- **Frage 3 — Löschen oder Archivieren von Kategorien/Läden:** Löschen, nicht Archivieren — gegen
+  die ursprüngliche Empfehlung. Kein Archivieren, keine `archived_at`-Spalte, keine zusätzliche
+  Migration dafür. Ein Eintrag lässt sich löschen, solange ihm kein Artikel mehr zugeordnet ist
+  (auch kein archivierter — der behält seine Zuordnung, §3); sonst eine deutsche Meldung mit der
+  Zahl der betroffenen Artikel statt eines `IntegrityError` (`app/repo/taxonomy.py::
+  count_assigned_items`, `app/web/taxonomy.py::_delete`).
+- **Frage 4 — Gruppierung im Board:** Das Board bleibt unverändert, wie ursprünglich empfohlen —
+  keine Zwischenüberschriften je Kategorie, kein Laden-Filter. Die Gruppierung wirkt dort, wo sie
+  den Weg durch den Laden tatsächlich abbildet: in `/liste` und im Export.
 
 ### M8 — Verbrauchshistorie und Prognose
 
