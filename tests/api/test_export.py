@@ -62,6 +62,35 @@ def _create_item(
     return int(response.headers["location"].rsplit("/", 1)[-1])
 
 
+def _create_store(client: TestClient, name: str) -> int:
+    client.post("/laeden", data={"name": name})
+    row = client.app.state.db.execute(  # type: ignore[attr-defined]
+        "SELECT id FROM stores WHERE name = ?", (name,)
+    ).fetchone()
+    assert row is not None
+    return int(row["id"])
+
+
+def _assign_store(client: TestClient, item_id: int, store_id: int) -> None:
+    from app.repo import items as items_repo
+
+    item = items_repo.get_by_id(client.app.state.db, item_id)  # type: ignore[attr-defined]
+    assert item is not None
+    response = client.post(
+        f"/artikel/{item_id}",
+        data={
+            "name": item.name,
+            "unit": item.unit,
+            "reorder_level": str(item.reorder_level),
+            "target_stock": str(item.target_stock),
+            "pack_size": str(item.pack_size),
+            "store_id": str(store_id),
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 303, response.text
+
+
 def _list_row(client: TestClient) -> tuple[str | None, int]:
     row = client.app.state.db.execute(  # type: ignore[attr-defined]
         "SELECT exported_at, export_count FROM shopping_lists WHERE status = 'open'"
@@ -256,6 +285,59 @@ def test_json_without_open_list(api_client: TestClient) -> None:
 
     assert payload["list_id"] is None
     assert payload["lines"] == []
+
+
+# --- Gruppierung nach Laden (M7) ----------------------------------------------------------------
+
+
+def test_text_format_without_any_store_has_no_group_headers(api_client: TestClient) -> None:
+    """M7, Frage 2: Eine einzelne "Sonstiges"-Gruppe — hier: gar kein Laden im Haushalt angelegt —
+    bekommt keine Überschrift, sonst wäre jede Liste ohne Taxonomie-Pflege mit einem
+    überflüssigen Punkt verunstaltet."""
+    _create_item(api_client, name="Klopapier", unit="Rolle")
+    _create_item(api_client, name="Kaffee", unit="Packung", target_stock=2, pack_size=1)
+
+    response = api_client.post("/api/shopping-list/export", headers={"X-API-Key": API_KEY})
+
+    assert "Sonstiges" not in response.text
+    assert response.text == "Klopapier — 10 Rollen\nKaffee — 2 Packungen"
+
+
+def test_text_format_groups_by_store_with_header_lines(api_client: TestClient) -> None:
+    """§9 M7 Definition of Done: Export gruppiert nach Laden. M7, Frage 2: Der Ladenname steht als
+    eigene Zeile — auch wenn der Kurzbefehl daraus einen abhakbaren Punkt macht."""
+    rewe_id = _create_store(api_client, "REWE")
+    aldi_id = _create_store(api_client, "Aldi")
+    klopapier_id = _create_item(api_client, name="Klopapier", unit="Rolle")
+    kaffee_id = _create_item(api_client, name="Kaffee", unit="Packung", target_stock=2, pack_size=1)
+    seife_id = _create_item(api_client, name="Seife", unit="Stück", target_stock=3, pack_size=1)
+    _assign_store(api_client, klopapier_id, rewe_id)
+    _assign_store(api_client, kaffee_id, aldi_id)
+    # Seife bleibt ohne Laden → landet in "Sonstiges".
+    assert seife_id > 0
+
+    response = api_client.post("/api/shopping-list/export", headers={"X-API-Key": API_KEY})
+
+    assert response.text == (
+        "REWE\nKlopapier — 10 Rollen\nAldi\nKaffee — 2 Packungen\nSonstiges\nSeife — 3 Stück"
+    )
+
+
+def test_json_format_includes_groups(api_client: TestClient) -> None:
+    rewe_id = _create_store(api_client, "REWE")
+    item_id = _create_item(api_client, name="Klopapier", unit="Rolle")
+    _assign_store(api_client, item_id, rewe_id)
+
+    payload = api_client.post(
+        "/api/shopping-list/export?format=json", headers={"X-API-Key": API_KEY}
+    ).json()
+
+    assert len(payload["groups"]) == 1
+    assert payload["groups"][0]["label"] == "REWE"
+    assert len(payload["groups"][0]["lines"]) == 1
+    assert payload["groups"][0]["lines"][0]["name"] == "Klopapier"
+    # Die flache Liste bleibt zusätzlich erhalten (Debugging/Rückwärtskompatibilität).
+    assert len(payload["lines"]) == 1
 
 
 # --- Schnappschuss ----------------------------------------------------------------------------

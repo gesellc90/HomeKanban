@@ -15,6 +15,7 @@ from app.migrate import migrate
 from app.repo import items as items_repo
 from app.repo import movements as movements_repo
 from app.repo import shopping_lists as lists_repo
+from app.repo import taxonomy as taxonomy_repo
 from app.services import shopping, stock
 
 MIGRATIONS_DIR = Path(__file__).resolve().parent.parent.parent / "migrations"
@@ -607,6 +608,8 @@ def test_renaming_an_item_does_not_change_the_open_list(connection: sqlite3.Conn
         reorder_level=1,
         target_stock=10,
         pack_size=10,
+        category_id=None,
+        store_id=None,
         updated_at=stock.utc_now_iso(),
     )
     shopping.reconcile(connection, list_row.id)
@@ -614,3 +617,91 @@ def test_renaming_an_item_does_not_change_the_open_list(connection: sqlite3.Conn
     line = _open_lines(connection, list_row.id)[0]
     assert line.name_snapshot == "Klopapier"
     assert line.unit_snapshot == "Rolle"
+
+
+def test_appending_a_line_freezes_the_items_store_and_category(
+    connection: sqlite3.Connection,
+) -> None:
+    """M7, Frage 1: Laden/Kategorie werden wie Name/Einheit beim Anfügen eingefroren."""
+    category_id = taxonomy_repo.insert(connection, "categories", name="Kühlregal", position=0)
+    store_id = taxonomy_repo.insert(connection, "stores", name="REWE", position=0)
+    item_id = _create_item(connection, name="Milch", initial_stock=0)
+    items_repo.update(
+        connection,
+        item_id,
+        name="Milch",
+        unit="Rolle",
+        note=None,
+        reorder_level=1,
+        target_stock=10,
+        pack_size=10,
+        category_id=category_id,
+        store_id=store_id,
+        updated_at=stock.utc_now_iso(),
+    )
+
+    list_row, _ = shopping.create_or_reconcile_list(connection)
+
+    line = _open_lines(connection, list_row.id)[0]
+    assert line.store_snapshot == "REWE"
+    assert line.store_position_snapshot == 0
+    assert line.category_snapshot == "Kühlregal"
+    assert line.category_position_snapshot == 0
+
+
+def test_reassigning_an_item_does_not_change_the_open_lines_group(
+    connection: sqlite3.Connection,
+) -> None:
+    """Der Kern von Frage 1: Ändert sich zu Hause die Laden-Zuordnung, während die Liste im
+    Supermarkt offen ist, bleibt die bereits angefügte Position bei ihrer eingefrorenen Gruppe."""
+    rewe_id = taxonomy_repo.insert(connection, "stores", name="REWE", position=0)
+    aldi_id = taxonomy_repo.insert(connection, "stores", name="Aldi", position=1)
+    item_id = _create_item(connection, name="Milch", initial_stock=0)
+    items_repo.update(
+        connection,
+        item_id,
+        name="Milch",
+        unit="Rolle",
+        note=None,
+        reorder_level=1,
+        target_stock=10,
+        pack_size=10,
+        category_id=None,
+        store_id=rewe_id,
+        updated_at=stock.utc_now_iso(),
+    )
+    list_row, _ = shopping.create_or_reconcile_list(connection)
+
+    items_repo.update(
+        connection,
+        item_id,
+        name="Milch",
+        unit="Rolle",
+        note=None,
+        reorder_level=1,
+        target_stock=10,
+        pack_size=10,
+        category_id=None,
+        store_id=aldi_id,
+        updated_at=stock.utc_now_iso(),
+    )
+    shopping.reconcile(connection, list_row.id)
+
+    line = _open_lines(connection, list_row.id)[0]
+    assert line.store_snapshot == "REWE"
+
+
+def test_line_of_item_without_store_or_category_has_no_snapshot(
+    connection: sqlite3.Connection,
+) -> None:
+    """Definition of Done §9 M7: unzugeordnete Artikel verschwinden nicht — sie landen später in
+    „Sonstiges“ (app/domain/grouping.py), hier zunächst nur: kein Absturz, keine Fantasiewerte."""
+    _create_item(connection, name="Klopapier", initial_stock=0)
+
+    list_row, _ = shopping.create_or_reconcile_list(connection)
+
+    line = _open_lines(connection, list_row.id)[0]
+    assert line.store_snapshot is None
+    assert line.store_position_snapshot is None
+    assert line.category_snapshot is None
+    assert line.category_position_snapshot is None

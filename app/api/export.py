@@ -22,8 +22,9 @@ from typing import Any
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
 
+from app.domain.grouping import MISC_LABEL, group_and_sort
 from app.domain.pluralization import plural_unit
-from app.domain.shopping import format_export_line, format_export_text
+from app.domain.shopping import format_export_group_header, format_export_line, format_export_text
 from app.repo import shopping_lists as lists_repo
 from app.services import shopping as shopping_service
 
@@ -91,41 +92,60 @@ def _authorize(request: Request, key: str | None) -> JSONResponse | None:
     return None
 
 
+def _export_line_text(line: lists_repo.ShoppingListLineRow) -> str:
+    return format_export_line(
+        name=line.name_snapshot, quantity=line.suggested_qty, unit=line.unit_snapshot
+    )
+
+
+def _line_payload(line: lists_repo.ShoppingListLineRow) -> dict[str, Any]:
+    return {
+        "line_id": line.id,
+        "item_id": line.item_id,
+        "name": line.name_snapshot,
+        "unit": line.unit_snapshot,
+        "unit_display": (
+            line.unit_snapshot if line.suggested_qty == 1 else plural_unit(line.unit_snapshot)
+        ),
+        "quantity": line.suggested_qty,
+        "text": _export_line_text(line),
+    }
+
+
 def _render(
     list_row: lists_repo.ShoppingListRow | None,
     lines: list[lists_repo.ShoppingListLineRow],
     response_format: str,
 ) -> Response:
-    texts = [
-        format_export_line(
-            name=line.name_snapshot, quantity=line.suggested_qty, unit=line.unit_snapshot
-        )
-        for line in lines
-    ]
+    # Gruppiert nach Laden, innerhalb nach Kategorie-Position (§9 M7 Definition of Done). Die
+    # eingefrorenen store_snapshot/category_snapshot-Werte machen `ShoppingListLineRow` bereits
+    # zu einem `Groupable` (M7, Frage 1 der Fragerunde).
+    groups = group_and_sort(lines)
+    # Eine einzelne "Sonstiges"-Gruppe heißt: keine Laden-/Kategoriezuordnung im ganzen Haushalt
+    # vorhanden. Dann eine Überschriftszeile zu erzwingen wäre reine Zusatzarbeit im Kurzbefehl
+    # ohne jeden Informationsgewinn (M7, Frage 2) — Überschriften erscheinen erst, sobald sie
+    # tatsächlich etwas zu unterscheiden gibt.
+    show_headers = len(groups) > 1 or (bool(groups) and groups[0].label != MISC_LABEL)
 
     if response_format == FORMAT_TEXT:
-        return PlainTextResponse(format_export_text(texts), media_type="text/plain; charset=utf-8")
+        text_lines: list[str] = []
+        for group in groups:
+            if show_headers:
+                text_lines.append(format_export_group_header(group.label))
+            text_lines.extend(_export_line_text(line) for line in group.entries)
+        return PlainTextResponse(
+            format_export_text(text_lines), media_type="text/plain; charset=utf-8"
+        )
 
     payload: dict[str, Any] = {
         "list_id": list_row.id if list_row is not None else None,
         "created_at": list_row.created_at if list_row is not None else None,
         "exported_at": list_row.exported_at if list_row is not None else None,
         "export_count": list_row.export_count if list_row is not None else 0,
-        "lines": [
-            {
-                "line_id": line.id,
-                "item_id": line.item_id,
-                "name": line.name_snapshot,
-                "unit": line.unit_snapshot,
-                "unit_display": (
-                    line.unit_snapshot
-                    if line.suggested_qty == 1
-                    else plural_unit(line.unit_snapshot)
-                ),
-                "quantity": line.suggested_qty,
-                "text": text,
-            }
-            for line, text in zip(lines, texts, strict=True)
+        "lines": [_line_payload(line) for line in lines],
+        "groups": [
+            {"label": group.label, "lines": [_line_payload(line) for line in group.entries]}
+            for group in groups
         ],
     }
     return JSONResponse(status_code=200, content=payload)

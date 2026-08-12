@@ -7,6 +7,7 @@ import pytest
 from app.domain.shopping import (
     ReconciliationItem,
     ReconciliationLine,
+    format_export_group_header,
     format_export_line,
     format_export_text,
     plan_reconciliation,
@@ -22,6 +23,10 @@ def _item(
     reorder_level: int = 1,
     target_stock: int = 10,
     pack_size: int = 10,
+    store_name: str | None = None,
+    store_position: int | None = None,
+    category_name: str | None = None,
+    category_position: int | None = None,
 ) -> ReconciliationItem:
     return ReconciliationItem(
         item_id=item_id,
@@ -31,6 +36,10 @@ def _item(
         reorder_level=reorder_level,
         target_stock=target_stock,
         pack_size=pack_size,
+        store_name=store_name,
+        store_position=store_position,
+        category_name=category_name,
+        category_position=category_position,
     )
 
 
@@ -218,6 +227,42 @@ def test_item_exactly_on_threshold_is_appended() -> None:
     assert [a.suggested_qty for a in plan.to_append] == [4]
 
 
+# --- Laden-/Kategorie-Schnappschuss (M7, Frage 1) -----------------------------------------------
+
+
+def test_appended_line_freezes_store_and_category_of_the_item() -> None:
+    plan = plan_reconciliation(
+        items=[
+            _item(
+                stock=0,
+                store_name="REWE",
+                store_position=0,
+                category_name="Kühlregal",
+                category_position=2,
+            )
+        ],
+        lines=[],
+        next_position=0,
+    )
+
+    assert len(plan.to_append) == 1
+    appended = plan.to_append[0]
+    assert appended.store_snapshot == "REWE"
+    assert appended.store_position_snapshot == 0
+    assert appended.category_snapshot == "Kühlregal"
+    assert appended.category_position_snapshot == 2
+
+
+def test_appended_line_of_unassigned_item_has_no_snapshot() -> None:
+    plan = plan_reconciliation(items=[_item(stock=0)], lines=[], next_position=0)
+
+    appended = plan.to_append[0]
+    assert appended.store_snapshot is None
+    assert appended.store_position_snapshot is None
+    assert appended.category_snapshot is None
+    assert appended.category_position_snapshot is None
+
+
 # --- Textformat --------------------------------------------------------------------------------
 
 
@@ -245,3 +290,10 @@ def test_export_text_joins_without_trailing_newline() -> None:
 
 def test_export_text_of_empty_list_is_empty() -> None:
     assert format_export_text([]) == ""
+
+
+def test_export_group_header_is_the_plain_label() -> None:
+    """Entschieden in der M7-Fragerunde (Frage 2): keine Dekoration, nur der Ladenname als eigene
+    Zeile — der Kurzbefehl macht daraus ohnehin einen abhakbaren Punkt."""
+    assert format_export_group_header("REWE") == "REWE"
+    assert format_export_group_header("Sonstiges") == "Sonstiges"

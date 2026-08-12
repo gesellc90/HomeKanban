@@ -32,7 +32,14 @@ EXPORT_SEPARATOR = " — "
 
 @dataclass(frozen=True)
 class ReconciliationItem:
-    """Ein aktiver Artikel, wie ihn der Abgleich sieht. Archivierte kommen gar nicht erst her."""
+    """Ein aktiver Artikel, wie ihn der Abgleich sieht. Archivierte kommen gar nicht erst her.
+
+    `store_name`/`store_position`/`category_name`/`category_position` tragen den Stand von
+    Laden und Kategorie zum Zeitpunkt des Abgleichs — beim Anfügen werden sie in die neue
+    Position eingefroren (M7, Frage 1 der Fragerunde: Snapshot statt Live-Join, konsistent mit
+    `name`/`unit` oben). `None` heißt „nicht zugeordnet“, landet in der Gruppe „Sonstiges“
+    (siehe `app/domain/grouping.py`).
+    """
 
     item_id: int
     name: str
@@ -41,6 +48,10 @@ class ReconciliationItem:
     reorder_level: int
     target_stock: int
     pack_size: int
+    store_name: str | None = None
+    store_position: int | None = None
+    category_name: str | None = None
+    category_position: int | None = None
 
     @property
     def below_threshold(self) -> bool:
@@ -66,6 +77,10 @@ class LineToAppend:
     name_snapshot: str
     unit_snapshot: str
     position: int
+    store_snapshot: str | None = None
+    store_position_snapshot: int | None = None
+    category_snapshot: str | None = None
+    category_position_snapshot: int | None = None
 
 
 @dataclass(frozen=True)
@@ -142,6 +157,10 @@ def plan_reconciliation(
                 name_snapshot=item.name,
                 unit_snapshot=item.unit,
                 position=position,
+                store_snapshot=item.store_name,
+                store_position_snapshot=item.store_position,
+                category_snapshot=item.category_name,
+                category_position_snapshot=item.category_position,
             )
         )
         position += 1
@@ -161,6 +180,19 @@ def format_export_line(*, name: str, quantity: int, unit: str) -> str:
     im Supermarkt offen ist, soll die Liste nicht plötzlich anders heißen.
     """
     return f"{name}{EXPORT_SEPARATOR}{format_quantity(quantity=quantity, unit=unit)}"
+
+
+def format_export_group_header(label: str) -> str:
+    """Eine Gruppenüberschrift im Textformat (§6, ab M7: „mit Gruppenüberschrift“).
+
+    Entschieden in der M7-Fragerunde (Frage 2): Der Kurzbefehl teilt den Text stur an
+    Zeilenumbrüchen und hängt jede Zeile als Checklistenpunkt an — eine Überschriftszeile wird
+    dadurch selbst zu einem abhakbaren Punkt (z. B. „REWE“). Bewusst in Kauf genommen, weil die
+    sichtbare Struktur im Laden hier schwerer wiegt als der eine überflüssige Haken je Gruppe;
+    siehe `docs/KURZBEFEHL.md` Abschnitt 4. Reine Textzeile, keine Dekoration — jedes Sonderzeichen
+    würde in Apple Notes nur als Teil des Checklistenpunkts erscheinen, nicht als Formatierung.
+    """
+    return label
 
 
 def format_export_text(lines: Sequence[str]) -> str:

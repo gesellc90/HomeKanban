@@ -59,3 +59,61 @@ def test_open_unchecked_item_ids_ignores_ids_not_in_the_query(
     _open_line(connection, item_id=with_line)
 
     assert shopping_lists_repo.open_unchecked_item_ids(connection, []) == set()
+
+
+def test_insert_line_persists_store_and_category_snapshot(connection: sqlite3.Connection) -> None:
+    item_id = _create_item(connection, name="Kaffee", position=0)
+    list_id = connection.execute(
+        "INSERT INTO shopping_lists (status, created_at) VALUES ('open', ?)", (_NOW,)
+    ).lastrowid
+    assert list_id is not None
+
+    line_id = shopping_lists_repo.insert_line(
+        connection,
+        list_id=list_id,
+        item_id=item_id,
+        suggested_qty=1,
+        name_snapshot="Kaffee",
+        unit_snapshot="Packung",
+        position=0,
+        store_snapshot="REWE",
+        store_position_snapshot=0,
+        category_snapshot="Kühlregal",
+        category_position_snapshot=2,
+    )
+
+    line = shopping_lists_repo.get_line(connection, line_id)
+    assert line is not None
+    assert line.store_snapshot == "REWE"
+    assert line.store_position_snapshot == 0
+    assert line.category_snapshot == "Kühlregal"
+    assert line.category_position_snapshot == 2
+    # Aliase für das Groupable-Protokoll aus app/domain/grouping.py (M7).
+    assert line.store_name == "REWE"
+    assert line.store_position == 0
+    assert line.category_name == "Kühlregal"
+    assert line.category_position == 2
+    assert line.sort_position == 0
+
+
+def test_insert_line_without_snapshot_defaults_to_none(connection: sqlite3.Connection) -> None:
+    item_id = _create_item(connection, name="Kaffee", position=0)
+    list_id = connection.execute(
+        "INSERT INTO shopping_lists (status, created_at) VALUES ('open', ?)", (_NOW,)
+    ).lastrowid
+    assert list_id is not None
+
+    line_id = shopping_lists_repo.insert_line(
+        connection,
+        list_id=list_id,
+        item_id=item_id,
+        suggested_qty=1,
+        name_snapshot="Kaffee",
+        unit_snapshot="Packung",
+        position=0,
+    )
+
+    line = shopping_lists_repo.get_line(connection, line_id)
+    assert line is not None
+    assert line.store_snapshot is None
+    assert line.category_name is None

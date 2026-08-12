@@ -72,7 +72,7 @@ def _create_open_list(connection: sqlite3.Connection) -> int:
 def test_0001_init_creates_all_seven_tables(raw_connection: sqlite3.Connection) -> None:
     applied = migrate(raw_connection, MIGRATIONS_DIR)
 
-    assert applied == ["0001_init.sql"]
+    assert "0001_init.sql" in applied
     tables = {
         row[0]
         for row in raw_connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
@@ -92,7 +92,7 @@ def test_0001_init_is_idempotent_on_second_run(raw_connection: sqlite3.Connectio
     first_run = migrate(raw_connection, MIGRATIONS_DIR)
     second_run = migrate(raw_connection, MIGRATIONS_DIR)
 
-    assert first_run == ["0001_init.sql"]
+    assert "0001_init.sql" in first_run
     assert second_run == []
 
 
@@ -270,3 +270,62 @@ class TestMovementChecks:
                 """,
                 (item_id, original, _NOW),
             )
+
+
+class Test0002ShoppingListTaxonomySnapshots:
+    """0002_shopping_list_taxonomy_snapshots.sql — M7, Frage 1 (docs/PLAN.md §9)."""
+
+    def test_adds_four_nullable_columns_to_shopping_list_lines(
+        self, raw_connection: sqlite3.Connection
+    ) -> None:
+        applied = migrate(raw_connection, MIGRATIONS_DIR)
+
+        assert "0002_shopping_list_taxonomy_snapshots.sql" in applied
+        columns = {
+            row["name"] for row in raw_connection.execute("PRAGMA table_info(shopping_list_lines)")
+        }
+        assert {
+            "store_snapshot",
+            "store_position_snapshot",
+            "category_snapshot",
+            "category_position_snapshot",
+        } <= columns
+
+    def test_existing_database_with_data_survives_the_upgrade(
+        self, raw_connection: sqlite3.Connection
+    ) -> None:
+        """Simuliert eine Datenbank, auf der bisher nur `0001_init.sql` lief: Zeilen aus der Zeit
+        vor der Migration müssen intakt bleiben (CLAUDE.md §4, keine destruktive Operation ohne
+        beschriebenen Rückweg — hier reicht die additive Migration selbst als Rückweg: Ein Rollback
+        ist nicht nötig, die alten Spalten bleiben unangetastet)."""
+        init_sql = (MIGRATIONS_DIR / "0001_init.sql").read_text(encoding="utf-8")
+        raw_connection.executescript(f"BEGIN;\n{init_sql}\nCOMMIT;")
+        raw_connection.execute(
+            "CREATE TABLE schema_migrations (version TEXT PRIMARY KEY, applied_at TEXT)"
+        )
+        raw_connection.execute(
+            "INSERT INTO schema_migrations (version, applied_at) VALUES ('0001_init.sql', ?)",
+            (_NOW,),
+        )
+
+        item_id = _create_minimal_item(raw_connection, name="Kaffee")
+        list_id = _create_open_list(raw_connection)
+        raw_connection.execute(
+            """
+            INSERT INTO shopping_list_lines (
+                list_id, item_id, suggested_qty, name_snapshot, unit_snapshot, position
+            ) VALUES (?, ?, 1, 'Kaffee', 'Packung', 0)
+            """,
+            (list_id, item_id),
+        )
+
+        applied = migrate(raw_connection, MIGRATIONS_DIR)
+
+        assert applied == ["0002_shopping_list_taxonomy_snapshots.sql"]
+        line = raw_connection.execute(
+            "SELECT * FROM shopping_list_lines WHERE list_id = ?", (list_id,)
+        ).fetchone()
+        assert line["name_snapshot"] == "Kaffee"
+        assert line["unit_snapshot"] == "Packung"
+        assert line["store_snapshot"] is None
+        assert line["category_position_snapshot"] is None

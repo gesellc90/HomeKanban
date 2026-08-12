@@ -16,12 +16,17 @@
   {% else %}
     {% include "shopping_actions.html" %}
 
-    {% if views %}
-      <ul class="list-lines">
-        {% for view in views %}
-          {% include "shopping_line.html" %}
-        {% endfor %}
-      </ul>
+    {% if groups %}
+      {% for group in groups %}
+        <section class="list-group">
+          <h2 class="list-group__label">{{ group.label }}</h2>
+          <ul class="list-lines">
+            {% for view in group.entries %}
+              {% include "shopping_line.html" %}
+            {% endfor %}
+          </ul>
+        </section>
+      {% endfor %}
     {% else %}
       <p class="list-empty">
         Nichts zu kaufen — alle Artikel sind ausreichend vorhanden.

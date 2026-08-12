@@ -89,6 +89,47 @@ def test_creating_a_list_shows_the_needed_items(client: TestClient) -> None:
     assert "Alles gekauft" in response.text
 
 
+def test_list_page_shows_a_sonstiges_heading_for_unassigned_items(client: TestClient) -> None:
+    """Anders als im Kurzbefehl-Textexport (M7, Frage 2) kostet eine Überschrift in der
+    Weboberfläche keinen Fremdpunkt — sie erscheint deshalb auch für die alleinige
+    "Sonstiges"-Gruppe."""
+    _create_item(client, name="Klopapier", unit="Rolle", stock=0)
+
+    _create_list(client)
+    response = client.get("/liste")
+
+    assert "Sonstiges" in response.text
+
+
+def test_list_page_groups_lines_by_store(client: TestClient) -> None:
+    client.post("/laeden", data={"name": "REWE"})
+    store_row = client.app.state.db.execute(  # type: ignore[attr-defined]
+        "SELECT id FROM stores WHERE name = 'REWE'"
+    ).fetchone()
+    store_id = store_row["id"]
+    item_id = _create_item(client, name="Klopapier", unit="Rolle", stock=0)
+    client.post(
+        f"/artikel/{item_id}",
+        data={
+            "name": "Klopapier",
+            "unit": "Rolle",
+            "reorder_level": "1",
+            "target_stock": "10",
+            "pack_size": "10",
+            "store_id": str(store_id),
+        },
+    )
+    _create_item(client, name="Seife", unit="Stück", stock=0, target_stock=3, pack_size=1)
+
+    _create_list(client)
+    response = client.get("/liste")
+
+    assert response.status_code == 200
+    assert response.text.index("REWE") < response.text.index("Klopapier")
+    assert response.text.index("Sonstiges") < response.text.index("Seife")
+    assert response.text.index("REWE") < response.text.index("Sonstiges")
+
+
 def test_empty_list_says_so_instead_of_failing(client: TestClient) -> None:
     _create_list(client)
 
