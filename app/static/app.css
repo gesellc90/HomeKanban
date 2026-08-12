@@ -527,3 +527,91 @@ section {
   font-size: 0.85rem;
   margin: 0.4rem 0 0;
 }
+
+/* --- Etiketten: Auswahlseite und QR-Block der Detailseite (M5) ---------------------------
+   Das Druck-CSS für die Bogen- und Kalibrierseite liegt bewusst getrennt in
+   `labels-print.css` — siehe den Kopfkommentar dort. */
+
+.item-qr {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--gap);
+  margin-bottom: 0.75rem;
+}
+
+.item-qr__image {
+  width: 160px;
+  height: 160px;
+  background: #ffffff;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 8px;
+}
+
+.item-qr__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.labels-form__hint {
+  color: var(--color-muted);
+  font-size: 0.9rem;
+  margin: 0 0 0.75rem;
+}
+
+.labels-picker {
+  list-style: none;
+  margin: 0 0 var(--gap);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+/* Trefferfläche ≥ 44 px, auch bei kurzen Artikelnamen (CLAUDE.md §8). */
+.labels-picker__label,
+.labels-grid-option {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: var(--tap-min);
+  padding: 0.5rem 0.75rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.labels-grid-option {
+  margin-bottom: 0.25rem;
+}
+
+.labels-picker__checkbox,
+.labels-grid-option input {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  accent-color: var(--color-primary);
+}
+
+.labels-picker__name {
+  font-weight: 600;
+}
+
+.labels-custom {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.labels-custom summary {
+  min-height: var(--tap-min);
+  display: flex;
+  align-items: center;
+  font-weight: 600;
+  cursor: pointer;
+}

@@ -1,0 +1,54 @@
+{# Druckoptimierte Bogenansicht (docs/PLAN.md §7, M5).
+
+   Bewusst **ohne** `base.html`: Diese Seite ist Papier, kein Bildschirm. Kopfzeile, Navigation
+   und HTMX gehören hier nicht hin, und `app.css` mit seiner Bildschirm-Typografie und dem
+   Seitenhintergrund würde dem Millimeterraster nur in die Quere kommen. Geladen wird deshalb
+   ausschließlich `labels-print.css` — lokal, ohne CDN (CLAUDE.md §4).
+
+   Die Werkzeugleiste oben ist `@media screen`-only und verschwindet im Ausdruck. #}
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Etikettenbogen – HomeKanban</title>
+    <link rel="stylesheet" href="/static/labels-print.css" />
+  </head>
+  <body>
+    <div class="toolbar">
+      <a class="toolbar__link" href="/etiketten">← Zurück zur Auswahl</a>
+      <span class="toolbar__info">
+        {{ label_count }} {{ "Etikett" if label_count == 1 else "Etiketten" }} auf
+        {{ placed_sheets|length }} {{ "Bogen" if placed_sheets|length == 1 else "Bögen" }}
+        ({{ grid.label_width_mm }} × {{ grid.label_height_mm }} mm)
+      </span>
+      <span class="toolbar__hint">
+        Vor dem ersten Druck einmal die
+        <a href="/etiketten/kalibrierung">Kalibrierseite</a> prüfen: Skalierung auf 100 %,
+        „An Seite anpassen“ aus.
+      </span>
+      <button type="button" class="toolbar__button" onclick="window.print()">Drucken</button>
+    </div>
+
+    {% for sheet_number, cells in placed_sheets %}
+      <div class="sheet" data-sheet="{{ sheet_number }}">
+        {% for cell in cells %}
+          {% if cell.label %}
+            <div
+              class="label"
+              style="
+                left: {{ cell.left_mm }}mm;
+                top: {{ cell.top_mm }}mm;
+                width: {{ grid.label_width_mm }}mm;
+                height: {{ grid.label_height_mm }}mm;
+              "
+            >
+              <div class="label__qr">{{ cell.label.qr_svg|safe }}</div>
+              <div class="label__name">{{ cell.label.name }}</div>
+            </div>
+          {% endif %}
+        {% endfor %}
+      </div>
+    {% endfor %}
+  </body>
+</html>

@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}Etiketten – HomeKanban{% endblock %}
+{% block content %}
+  {# Auswahlseite (docs/PLAN.md §7, M5). Bedienbar vom Handy — die Auswahl entsteht am Schrank,
+     gedruckt wird am Rechner. Deshalb `method="get"`: Die Auswahl landet in der URL und ist damit
+     wiederholbar, verlinkbar und per Reload harmlos. #}
+  <a class="back-link" href="/">← Zurück zum Board</a>
+
+  <h1>Etiketten drucken</h1>
+
+  {% if not items %}
+    <p class="list-empty">
+      Es gibt noch keine Artikel, für die sich ein Etikett drucken ließe.
+      <a href="/artikel/neu">Ersten Artikel anlegen</a>
+    </p>
+  {% else %}
+    {% if errors %}
+      <ul class="form-errors">
+        {% for error in errors %}<li>{{ error }}</li>{% endfor %}
+      </ul>
+    {% endif %}
+
+    <form method="get" action="/etiketten/druck" class="labels-form">
+      <section>
+        <h2>Artikel</h2>
+        <p class="labels-form__hint">
+          Archivierte Artikel stehen nicht zur Wahl — ein Scan ihres Etiketts würde nichts buchen.
+        </p>
+        <ul class="labels-picker">
+          {% for item in items %}
+            <li class="labels-picker__item">
+              <label class="labels-picker__label" for="item-{{ item.id }}">
+                <input
+                  class="labels-picker__checkbox"
+                  type="checkbox"
+                  id="item-{{ item.id }}"
+                  name="item_id"
+                  value="{{ item.id }}"
+                  {% if item.id in preselected %}checked{% endif %}
+                />
+                <span class="labels-picker__name">{{ item.name }}</span>
+              </label>
+            </li>
+          {% endfor %}
+        </ul>
+      </section>
+
+      <section>
+        <h2>Etikettenbogen</h2>
+        <p class="labels-form__hint">
+          Die Maße folgen den gängigen A4-Bögen, sind aber nicht vom Hersteller bestätigt. Was
+          zählt, ist das Lineal: bitte vor dem ersten Druck die
+          <a href="/etiketten/kalibrierung">Kalibrierseite</a> prüfen.
+        </p>
+
+        {% for preset in presets %}
+          <label class="labels-grid-option" for="grid-{{ preset.key }}">
+            <input
+              type="radio"
+              id="grid-{{ preset.key }}"
+              name="grid_key"
+              value="{{ preset.key }}"
+              {% if grid_key == preset.key %}checked{% endif %}
+            />
+            <span>{{ preset.label }}</span>
+          </label>
+        {% endfor %}
+
+        <label class="labels-grid-option" for="grid-{{ custom_key }}">
+          <input
+            type="radio"
+            id="grid-{{ custom_key }}"
+            name="grid_key"
+            value="{{ custom_key }}"
+            {% if grid_key == custom_key %}checked{% endif %}
+          />
+          <span>Frei einstellbar (Werte unten)</span>
+        </label>
+
+        <details class="labels-custom" {% if grid_key == custom_key %}open{% endif %}>
+          <summary>Freies Raster einstellen</summary>
+          <p class="labels-form__hint">
+            Wirkt nur zusammen mit „Frei einstellbar“. Alle Angaben in Millimetern, Ränder gemessen
+            bis zur ersten Zelle, Abstände zwischen den Zellen.
+          </p>
+          <div class="item-form">
+            <label for="columns">Spalten</label>
+            <input id="columns" name="columns" type="number" min="1" step="1"
+                   value="{{ grid.columns }}" />
+
+            <label for="rows">Zeilen</label>
+            <input id="rows" name="rows" type="number" min="1" step="1" value="{{ grid.rows }}" />
+
+            <label for="label_width">Etikettenbreite (mm)</label>
+            <input id="label_width" name="label_width" type="number" min="1" step="0.1"
+                   value="{{ grid.label_width_mm }}" />
+
+            <label for="label_height">Etikettenhöhe (mm)</label>
+            <input id="label_height" name="label_height" type="number" min="1" step="0.1"
+                   value="{{ grid.label_height_mm }}" />
+
+            <label for="margin_left">Rand links (mm)</label>
+            <input id="margin_left" name="margin_left" type="number" min="0" step="0.1"
+                   value="{{ grid.margin_left_mm }}" />
+
+            <label for="margin_top">Rand oben (mm)</label>
+            <input id="margin_top" name="margin_top" type="number" min="0" step="0.1"
+                   value="{{ grid.margin_top_mm }}" />
+
+            <label for="column_gap">Abstand zwischen Spalten (mm)</label>
+            <input id="column_gap" name="column_gap" type="number" min="0" step="0.1"
+                   value="{{ grid.column_gap_mm }}" />
+
+            <label for="row_gap">Abstand zwischen Zeilen (mm)</label>
+            <input id="row_gap" name="row_gap" type="number" min="0" step="0.1"
+                   value="{{ grid.row_gap_mm }}" />
+          </div>
+        </details>
+      </section>
+
+      <button type="submit" class="button button--primary">Bogen anzeigen</button>
+    </form>
+
+    <p class="labels-form__hint">
+      <a href="/etiketten/kalibrierung">Kalibrierseite öffnen</a> — 100-mm-Referenz zum Nachmessen
+      vor dem ersten Druck.
+    </p>
+  {% endif %}
+{% endblock %}

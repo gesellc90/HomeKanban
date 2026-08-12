@@ -30,9 +30,22 @@
     {% endif %}
 
     <section class="scan-link">
-      <h2>Entnahme-Link</h2>
+      <h2>Etikett</h2>
+      <div class="item-qr">
+        <img
+          class="item-qr__image"
+          src="/artikel/{{ item.id }}/qr.svg"
+          alt="QR-Code für die Entnahmeseite von {{ item.name }}"
+          width="160"
+          height="160"
+        />
+        <div class="item-qr__actions">
+          <a class="button" href="/artikel/{{ item.id }}/qr.png" download>PNG herunterladen</a>
+          <a class="button" href="/etiketten?item_id={{ item.id }}">Auf Bogen drucken</a>
+        </div>
+      </div>
       <p class="scan-link__hint">
-        Zum Testen ohne Etikett — der Einzel-QR-Code kommt erst in M5.
+        Liest die Kamera den Code nicht, führt dieser Link an dieselbe Stelle:
       </p>
       <a class="scan-link__url" href="{{ scan_url }}">{{ scan_url }}</a>
       <input

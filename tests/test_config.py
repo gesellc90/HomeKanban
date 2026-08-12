@@ -10,7 +10,8 @@ from app.config import Settings
 def test_defaults_match_plan_section_8() -> None:
     settings = Settings(_env_file=None)
 
-    assert settings.base_url == "http://raspberrypi.local:8181"
+    # In M5 mit dem Nutzer festgelegt (R6): eigener mDNS-Name statt des Pi-Hostnamens.
+    assert settings.base_url == "http://homekanban.local:8181"
     assert settings.port == 8181
     assert settings.db_path == Path("/data/homekanban.db")
     assert settings.api_key is None

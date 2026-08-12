@@ -16,7 +16,10 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    base_url: str = "http://raspberrypi.local:8181"
+    # Steckt in jedem gedruckten QR-Code (§8, R6). Mit dem Nutzer in M5 endgültig
+    # festgelegt: eigener mDNS-Name statt des Pi-Hostnamens, damit die geklebten Etiketten auch
+    # eine Umbenennung oder einen Hardwaretausch des Pi überleben.
+    base_url: str = "http://homekanban.local:8181"
     port: int = 8181
     db_path: Path = Path("/data/homekanban.db")
     api_key: str | None = None
