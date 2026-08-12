@@ -58,7 +58,12 @@ Rate nicht bei Entscheidungen, die dem Nutzer gehören.
   (`dropped_at`), vorgeschlagene Kaufmenge → `suggested_qty`, tatsächlich gekaufte Menge →
   `purchased_qty`, Kopie von Name und Einheit zum Erzeugungszeitpunkt → `snapshot`
   (`name_snapshot`, `unit_snapshot`), Einkauf abschließen → `complete`, Pluralform einer
-  Einheit → `plural_unit`.
+  Einheit → `plural_unit`, Etikett → `label`, Etikettenbogen → `sheet` (`LabelSheet`), Raster →
+  `grid` (`LabelGrid`), Zelle des Rasters → `slot` (`LabelSlot`), benanntes Raster →
+  `preset` (`GridPreset`), frei einstellbares Raster → `custom`, Bogenaufteilung →
+  `pagination` (Funktion: `paginate_labels`), Kalibrierung → `calibration`, Ruhezone des
+  QR-Codes → `border`, Fehlerkorrekturstufe → `error correction`, Modul (kleinstes Quadrat im
+  QR-Code) → `module`.
   Erweitere das Glossar, wenn ein neuer Begriff dazukommt.
 
 ## 3. Gesetzte Entscheidungen

@@ -3,10 +3,11 @@
 Kanban-Verwaltung für Alltagsverbrauchsmittel im Haushalt — läuft im Heimnetz auf einem
 Raspberry Pi, parallel zur bestehenden Web-App „Hängt! – jeder Strich zählt“.
 
-> **Status: M0–M4 umgesetzt (Fundament, Domänenmodell & Persistenz, Board & Artikelpflege,
-> QR-Entnahme-Flow, Einkaufsliste & Apple-Notes-Export).** Bei M4 steht ein Punkt noch aus: Der
-> iOS-Kurzbefehl ist noch nicht auf dem iPhone durchgeführt worden — Anleitung dazu in
-> [`docs/KURZBEFEHL.md`](docs/KURZBEFEHL.md).
+> **Status: M0–M5 umgesetzt (Fundament, Domänenmodell & Persistenz, Board & Artikelpflege,
+> QR-Entnahme-Flow, Einkaufsliste & Apple-Notes-Export, Etiketten).** Zwei Punkte stehen noch aus,
+> beide brauchen Hardware statt Code: Der iOS-Kurzbefehl aus M4 ist noch nicht auf dem iPhone
+> durchgeführt worden ([`docs/KURZBEFEHL.md`](docs/KURZBEFEHL.md)), und die Etiketten aus M5 sind
+> noch nicht gedruckt, gemessen und gescannt ([`ops/ETIKETTEN.md`](ops/ETIKETTEN.md)).
 > Anforderungen und Rahmen: [`docs/PROJEKT-PROMPT.md`](docs/PROJEKT-PROMPT.md).
 > Architektur, Datenmodell, Meilensteine, Risiken: [`docs/PLAN.md`](docs/PLAN.md).
 
@@ -30,7 +31,7 @@ abhakbare Checkliste in Apple Notes holt.
 | Kanban | Mengenzählung mit Mindest-/Sollbestand, abgeleiteter Status, Bewegungsjournal |
 | Rückmeldung | QR-Code je Artikel → Artikelseite → Entnahme bestätigen |
 | Einkaufsliste | Export-Endpoint, den ein iOS-Kurzbefehl in Apple Notes schreibt |
-| Etiketten | Einzel-QR je Artikel + Sammel-PDF mit Etikettenbögen |
+| Etiketten | Einzel-QR je Artikel + druckoptimierte A4-Etikettenbögen (ADR 0004) |
 | Checks | Ausschließlich lokal (Git-Hooks + Make), **keine GitHub Actions** |
 | Lizenz | **Noch nicht festgelegt** — bewusst keine `LICENSE` im Repo |
 
@@ -43,7 +44,7 @@ abhakbare Checkliste in Apple Notes holt.
 | M2 | Kanban-Board & Artikelpflege | erledigt |
 | M3 | QR-Entnahme-Flow | erledigt |
 | M4 | Einkaufsliste & Apple-Notes-Export | erledigt — iPhone-Verifikation des Kurzbefehls steht aus |
-| M5 | Etiketten (Einzel-QR + PDF-Bögen) | offen |
+| M5 | Etiketten (Einzel-QR + Druckbögen) | erledigt — Testdruck, Messung und Scanprobe stehen aus |
 | M6 | Deployment auf dem Raspberry Pi | offen |
 | M7 | Kategorien & Ladenzuordnung | offen |
 | M8 | Verbrauchshistorie & Prognose | offen |
@@ -54,8 +55,11 @@ Umfang, Definition of Done und Testfokus je Meilenstein: [`docs/PLAN.md`](docs/P
 **Pi-Zugriff:** `192.168.0.15` im Heimnetz, aktuell ohne Reverse Proxy vor „Hängt!“ (ein Proxy ist
 dort vorgesehen und könnte später ergänzt werden, siehe `docs/PLAN.md` §10, O2). HomeKanban wird
 trotzdem über einen mDNS-Hostnamen statt der festen IP angesprochen, damit die gedruckten
-QR-Etiketten einen Hardware- oder Adresswechsel überleben — Portwahl und genauer Hostname werden
-in M6 geprüft.
+QR-Etiketten einen Hardware- oder Adresswechsel überleben. Seit M5 steht der Wert fest:
+`http://homekanban.local:8181` — er steckt in jedem gedruckten Code und ist ohne Neudruck nicht
+mehr zu ändern (`docs/PLAN.md` §8, R6). Der mDNS-Alias auf dem Pi und der Nachweis, dass Port
+`8181` frei ist (`ss -ltnp`), gehören nach M6 — beides muss aber **vor** dem ersten Etikettendruck
+erledigt sein.
 
 ## Tests laufen lokal — nicht in der Cloud
 
@@ -95,6 +99,7 @@ docs/PROJEKT-PROMPT.md           Anforderungen, Technologie-Rahmen, Meilensteine
 docs/PLAN.md                     Detailplanung: Architektur, Datenmodell, Risiken, Szenarien
 docs/KURZBEFEHL.md               Anleitung für den iOS-Kurzbefehl (Apple Notes / Erinnerungen)
 docs/adr/                        Architekturentscheidungen, je eine Datei
+ops/ETIKETTEN.md                 Etikettenformat, Größe, Scanreichweite, Schritte vor dem Druck
 .githooks/                       versionierte Git-Hooks (pre-commit, pre-push)
 .github/                         PR- und Issue-Vorlagen (keine Workflows)
 ```

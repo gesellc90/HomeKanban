@@ -7,7 +7,8 @@ sie im selben Pull Request nachgezogen.
 **Stand:** M0 (Fundament & Entscheidungen) umgesetzt. M1 (Domänenmodell & Persistenz) umgesetzt.
 M2 (Board & Artikelpflege) umgesetzt. M3 (QR-Entnahme-Flow) umgesetzt. M4 (Einkaufsliste &
 Apple-Notes-Export) umgesetzt — mit einem ausstehenden Punkt: die Durchführung des Kurzbefehls
-auf dem iPhone (§9, M4).
+auf dem iPhone (§9, M4). M5 (Etiketten) umgesetzt — ebenfalls mit einem ausstehenden Punkt:
+Testdruck, Messung der Kalibrierseite und Scanprobe am geklebten Etikett (§9, M5).
 
 ---
 
@@ -36,8 +37,8 @@ sie schwer umkehrbar sind.
 
 | # | Annahme | Auswirkung, falls falsch |
 | --- | --- | --- |
-| A1 | „Hängt!“ belegt **nicht** Port `8181`. Der Port ist über `.env` frei setzbar; M6 enthält einen Prüfschritt auf dem Pi vor dem ersten Start. | Nur eine Zahl in `.env`, aber **vor** dem Etikettendruck zu klären — die Portnummer steht in jedem QR-Code. |
-| A2 | Auf dem Pi läuft **kein** Reverse Proxy, der Namen auf Dienste verteilt; der Zugriff erfolgt direkt über `http://<hostname>.local:<port>`. | Mit Proxy wäre eine Pfad- oder Subdomain-Basis besser (`http://pi.local/kanban`) — das ist reine Konfiguration von `BASE_URL`, muss aber ebenfalls vor dem Etikettendruck stehen. |
+| A1 | **Weiterhin offen.** „Hängt!“ belegt **nicht** Port `8181`. Der Port ist über `.env` frei setzbar; M6 enthält einen Prüfschritt auf dem Pi vor dem ersten Start. | Nur eine Zahl in `.env`, aber **vor** dem Etikettendruck zu klären — die Portnummer steht in jedem QR-Code. M5 hat `BASE_URL` samt Port `8181` festgelegt und gedruckt wird damit; der `ss -ltnp`-Nachweis auf dem Pi steht aber weiterhin aus und muss **vor** dem ersten Ausdruck erfolgen (siehe `ops/ETIKETTEN.md`). |
+| ~~A2~~ | **Erledigt** (bestätigt in der Antwort zu O2): Auf dem Pi läuft **kein** Reverse Proxy, der Zugriff erfolgt direkt über `http://<hostname>.local:<port>`. In M5 als `http://homekanban.local:8181` in `BASE_URL` festgeschrieben. | — |
 | A3 | Das Pi-Betriebssystem ist 64-bit (`aarch64`). | Bei 32-bit armv7 muss das Basis-Image gewechselt werden; da alle Abhängigkeiten reines Python sind, entstehen keine Build-Probleme. |
 | A4 | Bis zu fünf Personen, grob 30–80 Artikel, wenige Buchungen pro Tag. | Die Größenordnung rechtfertigt SQLite und serverseitiges Rendern; bei tausenden Artikeln wäre die Board-Ansicht zu paginieren. |
 | A5 | Die Haushaltsmitglieder scannen mit der iPhone-Kamera, nicht mit einer Scanner-App. | Andere Scanner öffnen URLs teils in In-App-Browsern ohne Cookies — der Entwurf hängt bewusst an keinem Cookie. |
@@ -98,6 +99,10 @@ app/
     quantities.py         Rundung auf Kaufeinheit, Nachkaufmenge
     status.py             Statusableitung (OK / Nachkaufen / Auf Liste)
     validation.py         Prüfregeln für Artikelstammdaten, deutsche Meldungen   (M2)
+    undo.py               Undo-Fenster   (M3)
+    shopping.py           Abgleich der Einkaufsliste (plan_reconciliation)   (M4)
+    pluralization.py      deutsche Pluralregel für Einheiten   (M4)
+    labels.py             Etikettenraster, Rasterprüfung, Bogenaufteilung   (M5)
     forecast.py           Verbrauchsrate, Reichweite, Schwellenvorschlag   (M8)
   repo/
     items.py  movements.py  shopping_lists.py  taxonomy.py
@@ -112,12 +117,14 @@ app/
   templates/              Jinja2, base + Seiten + HTMX-Partials
   static/
     htmx.min.js           mitgeliefert, kein CDN
+    app.js                htmx:beforeSwap-Handler, die einzige eigene JS-Datei   (M4)
     app.css               eine Datei, keine Framework-Abhängigkeit
+    labels-print.css      Millimeterraster und @page-Regeln der Druckansichten   (M5)
 migrations/               0001_init.sql, 0002_….sql
 tests/
   domain/  services/  web/  api/  conftest.py
 ops/
-  Dockerfile  compose.yaml  backup.py  BETRIEB.md
+  Dockerfile  compose.yaml  ETIKETTEN.md  backup.py  BETRIEB.md
 docs/
   PROJEKT-PROMPT.md  PLAN.md  KURZBEFEHL.md  adr/
 ```
@@ -270,8 +277,16 @@ Beispiele, die als Testtabelle in `tests/domain/` landen:
 ## 5. QR-Entnahme-Flow
 
 **Etikett → URL:** `http://<BASE_URL>/e/<token>` — bewusst kurz. Jedes Zeichen mehr erhöht die
-Modulzahl im QR-Code und damit die nötige Etikettengröße; `/e/` plus 22 Zeichen Token bleibt in
-Version 3 und ist von einem 25-mm-Etikett auch bei schlechtem Licht im Vorratsschrank lesbar.
+Modulzahl im QR-Code und damit die nötige Etikettengröße.
+
+> **In M5 nachgerechnet und korrigiert.** Hier stand ursprünglich, `/e/` plus 22 Zeichen Token
+> bleibe in **Version 3**. Das ist zu optimistisch: Version 3 fasst bei Fehlerkorrektur „M“ nur
+> 42 Byte, die tatsächliche URL `http://homekanban.local:8181/e/<22 Zeichen>` braucht 53. Sie
+> ergibt **Version 4 (33 × 33 Module)**. Für Version 3 müsste `BASE_URL` auf höchstens 17 Zeichen
+> schrumpfen — also ohne Portangabe und mit sehr kurzem Hostnamen. Praktisch kostet Version 4
+> gegenüber 3 nur rund 12 % Modulkantenlänge bei gleicher Etikettengröße; die Aussage „von einem
+> 25-mm-Etikett auch bei schlechtem Licht lesbar“ bleibt damit knapp gültig. Die gerechneten
+> Größen je Raster stehen in [`ops/ETIKETTEN.md`](../ops/ETIKETTEN.md); gemessen ist noch nichts.
 
 **Der GET verändert nichts.** Das ist keine Stilfrage: Kamera-Apps, Messenger-Vorschauen und
 Browser laden URLs vorab. Deshalb:
@@ -450,7 +465,7 @@ englischen.
 | POST | `/liste/{id}/abschliessen` | offene Positionen verwerfen, Liste schließen | 4 |
 | GET | `/api/shopping-list` | lesen, `text` oder `json`, API-Key | 4 |
 | POST | `/api/shopping-list/export` | Abgleich + Export für den Kurzbefehl | 4 |
-| GET | `/artikel/{id}/qr.svg` · `qr.png` | Einzel-QR | 5 |
+| GET | `/artikel/{id}/qr.svg` · `qr.png` | Einzel-QR; archiviert → `410` | 5 |
 | GET | `/etiketten` | Auswahl und Rasterwahl | 5 |
 | GET | `/etiketten/druck` | druckoptimierte Bogenansicht | 5 |
 | GET | `/etiketten/kalibrierung` | Maßstabskontrolle vor dem Druck | 5 |
@@ -473,7 +488,7 @@ Alles aus `.env`, Vorlage als `.env.example` im Repo. Keine Geheimnisse in Git.
 
 | Variable | Standard | Anmerkung |
 | --- | --- | --- |
-| `HOMEKANBAN_BASE_URL` | `http://raspberrypi.local:8181` | **steckt in jedem gedruckten QR-Code** — vor dem Etikettendruck festlegen |
+| `HOMEKANBAN_BASE_URL` | `http://homekanban.local:8181` | **steckt in jedem gedruckten QR-Code.** In M5 endgültig festgelegt (R6); ohne Neudruck nicht mehr zu ändern. Der Name `homekanban.local` braucht auf dem Pi einen mDNS-Alias (M6). |
 | `HOMEKANBAN_PORT` | `8181` | muss frei sein, siehe A1 |
 | `HOMEKANBAN_DB_PATH` | `/data/homekanban.db` | Volume |
 | `HOMEKANBAN_API_KEY` | — | Pflicht; ohne Wert verweigert der Export-Endpunkt den Dienst |
@@ -485,7 +500,10 @@ Alles aus `.env`, Vorlage als `.env.example` im Repo. Keine Geheimnisse in Git.
 | `LOG_LEVEL` | `info` | nach stdout, nicht auf die SD-Karte |
 
 **Der Hostname statt der IP in `BASE_URL` ist wichtig:** Vergibt der Router dem Pi per DHCP eine
-neue Adresse, wären sonst alle geklebten Etiketten Altpapier.
+neue Adresse, wären sonst alle geklebten Etiketten Altpapier. Gewählt wurde in M5 bewusst ein
+**eigener** Name (`homekanban.local`) statt `raspberrypi.local`: So überleben die Etiketten auch
+eine Umbenennung des Pi oder einen Hardwaretausch, solange der Name mitwandert. Der Port `8181`
+steht damit ebenfalls in jedem Code — sein Freisein ist bis M6 unbestätigt (A1).
 
 ---
 
@@ -579,6 +597,14 @@ berechnet), Teilkauf nach Regel 5, zweiter Export ohne zweite Liste, Textformat 
 
 ### M5 — Etiketten
 
+**Status:** erledigt — **mit einem ausstehenden Punkt:** Testdruck, Messung der Kalibrierseite und
+Scanprobe am geklebten Etikett stehen aus. Das braucht Papier, Drucker und Kamera und kann keine
+lokale Testsuite abdecken; die Schritt-für-Schritt-Anleitung dazu steht in
+[`ops/ETIKETTEN.md`](../ops/ETIKETTEN.md). Bis dahin bleibt auch offen, ob ADR 0004
+(druckoptimiertes HTML statt PDF-Bibliothek) trägt — erweist sich der Browserdruck als nicht
+maßhaltig, ist ReportLab die dort vorgemerkte Rückfallposition und ADR 0004 wäre zu **ersetzen**.
+Alles andere aus der Definition of Done ist umgesetzt und getestet.
+
 **Ziel:** Ein Bogen zum Ausdrucken, damit der Haushalt beklebt werden kann.
 **Drin:** `segno`-Anbindung, Einzel-QR als SVG und PNG, Auswahlseite, Bogenansicht mit
 Millimeter-Raster für gängige A4-Etiketten, Kalibrierseite mit 100-mm-Referenz.
@@ -587,7 +613,28 @@ Millimeter-Raster für gängige A4-Etiketten, Kalibrierseite mit 100-mm-Referenz
 **Definition of Done:** Ein echter Ausdruck ist maßhaltig (Kalibrierseite geprüft) und die Codes
 sind vom geklebten Etikett aus 20 cm Entfernung scanbar; nur nicht archivierte Artikel erscheinen.
 **Testfokus:** QR-Inhalt entspricht `BASE_URL` + Token, Umbruch auf mehrere Bögen, Auswahl leer.
-**Artefakte:** Etikettenbögen, `ops/`-Hinweis zur Etikettengröße.
+**Artefakte:** Etikettenbögen, `ops/ETIKETTEN.md` mit Format, Größe und Scanreichweite.
+
+**In M5 entschieden** (Fragerunde mit dem Nutzer, CLAUDE.md §1):
+
+- **`BASE_URL` = `http://homekanban.local:8181`** (§8). Eigener mDNS-Name statt
+  `raspberrypi.local`, damit die Etiketten auch eine Umbenennung oder einen Hardwaretausch des Pi
+  überleben. Braucht in M6 einen Avahi-Alias auf dem Pi.
+- **Etikettenraster:** drei Voreinstellungen (70 × 37 mm als Standard, 63,5 × 38,1 mm,
+  48,5 × 25,4 mm) plus ein frei einstellbares Raster. Welche Bögen im Haus liegen, ist noch
+  offen — deshalb sind alle da, und die Kalibrierseite entscheidet am Drucker.
+- **Auf dem Etikett stehen nur QR-Code und Artikelname.** Keine Einheit, keine abtippbare URL:
+  Der Klartextname ist nötig, damit sich ein abgefallenes Etikett zuordnen lässt (R9), die URL
+  ginge auf kleinen Rastern nur auf Kosten der QR-Fläche. Der kopierbare Link bleibt stattdessen
+  auf der Artikel-Detailseite.
+- **Keine wählbare Startposition für angebrochene Bögen.** Jeder Druck beginnt bei Zelle 1; ein
+  Nachdruck einzelner Etiketten (R9) verbraucht damit einen frischen Bogen. Bewusst gegen die
+  Empfehlung entschieden, zugunsten einer einfacheren Oberfläche. Kommt der Wunsch später doch,
+  ist es ein Versatz in `paginate_labels` und ein Formularfeld.
+
+**Abweichungen von diesem Plan, im selben PR nachgezogen:** §2 kennt jetzt `domain/labels.py` und
+`static/labels-print.css`; §5 korrigiert die QR-Version von 3 auf 4; §8 trägt die festgelegte
+`BASE_URL`.
 
 ### M6 — Deployment auf dem Raspberry Pi
 
@@ -659,10 +706,10 @@ Richtige, Import lehnt kaputte Dateien ab, ohne bestehende Daten anzufassen.
 | R3 | **Bestandsdrift** durch nicht gescannte Entnahmen. | Die Liste wird unglaubwürdig, danach nutzt sie keiner mehr. | „Bestand korrigieren“ ist auf jeder Entnahmeseite erreichbar, nicht in einem Untermenü; M8 markiert unplausibel niedrigen Verbrauch; Etiketten kleben am Entnahmeort, nicht am Vorratsschrank. Vollständig lösen lässt sich das nicht — die Gegenmaßnahme ist, dass Korrigieren so billig ist wie Buchen. |
 | R4 | **Kollision mit „Hängt!“** über Port, Hostname oder Speicher. | Im schlimmsten Fall steht die bestehende App. | Eigener Container, eigenes Volume, Port aus `.env` mit Prüfschritt in M6, Speicherlimit im Compose. Vor dem ersten Start zu klären (A1). |
 | R5 | **SD-Karten-Ausfall.** | Totalverlust von Historie und Stammdaten. | WAL, `synchronous=NORMAL`, keine Logs auf die Karte, M9 mit geprüftem Restore, Backup-Ziel außerhalb des Pi. Empfehlung: Systemlaufwerk auf USB-SSD. |
-| R6 | **`BASE_URL` ändert sich** nach dem Etikettendruck. | Alle geklebten QR-Codes zeigen ins Nichts. | Hostname statt IP (§8), `BASE_URL` als Pflichtentscheidung vor M5, in `BETRIEB.md` als „nicht ohne Neudruck ändern“ vermerkt. Erwägenswert: eine Weiterleitung, die alte Basis-URLs toleriert. |
+| R6 | **`BASE_URL` ändert sich** nach dem Etikettendruck. | Alle geklebten QR-Codes zeigen ins Nichts. | **Entschieden in M5:** `http://homekanban.local:8181` — eigener mDNS-Name statt IP und statt `raspberrypi.local` (§8). Als „nicht ohne Neudruck ändern“ in [`ops/ETIKETTEN.md`](../ops/ETIKETTEN.md) vermerkt, gehört in M6 auch nach `BETRIEB.md`. **Restrisiko:** Der Port `8181` steckt mit in jedem Code und ist bis M6 unbestätigt (A1) — der `ss -ltnp`-Nachweis muss vor dem ersten Ausdruck erfolgen. Erwägenswert bleibt eine Weiterleitung, die alte Basis-URLs toleriert. |
 | R7 | **Gleichzeitige Schreibzugriffe** auf SQLite. | `database is locked` mitten im Scan. | WAL, `busy_timeout=5000`, kurze Transaktionen, keine Transaktion über einen Render-Vorgang hinweg. In M6 mit zwei Geräten geprüft. **Offener Defekt, siehe unten.** |
 | R8 | **Die App wird nach drei Wochen nicht mehr benutzt.** Das ist das eigentliche Projektrisiko. | Aufwand ohne Nutzen. | Zwei-Tap-Anspruch als Abnahmekriterium in M3, kein Login, früher Echtbetrieb ab M3 statt großer Fertigstellung, wenige Artikel zu Beginn (10–15 statt „alles“). |
-| R9 | **Etikettenpflege:** neue Artikel, abgefallene Aufkleber. | Löcher im System, gerade bei selten gekauften Dingen. | Nachdruck einzelner Etiketten aus der Detailansicht, `qr_token` bleibt bei Umbenennung stabil, Reservebogen im Vorratsschrank. |
+| R9 | **Etikettenpflege:** neue Artikel, abgefallene Aufkleber. | Löcher im System, gerade bei selten gekauften Dingen. | Nachdruck einzelner Etiketten aus der Detailansicht (seit M5: QR als SVG und PNG direkt am Artikel), `qr_token` bleibt bei Umbenennung stabil, Reservebogen im Vorratsschrank. Der Artikelname steht als Klartext auf jedem Etikett, damit sich ein abgefallener Aufkleber zuordnen lässt. **Bewusst nicht gelöst:** Ein Nachdruck beginnt immer bei Zelle 1 und verbraucht einen frischen Bogen — eine wählbare Startposition für angebrochene Bögen wurde in M5 verworfen (§9). |
 
 ### Offener Defekt zu R7: eine Verbindung für alle Anfragen
 
