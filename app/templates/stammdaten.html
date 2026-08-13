@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Stammdaten – HomeKanban{% endblock %}
+{% block content %}
+  <a class="back-link" href="/">← Zurück zum Board</a>
+  <h1>Stammdaten-Export und -Import</h1>
+  <p class="taxonomy-hint">
+    Artikel (mit Vorlaufzeit), Kategorien und Läden zum Ansehen und Wiederanlegen — ohne
+    Bewegungen und ohne Einkaufslisten. Für die vollständige Sicherung mit Verlauf ist das
+    Datenbank-Backup gedacht, siehe <code>ops/BACKUP.md</code>. Ein Import erzeugt neue
+    QR-Codes; bestehende Etiketten müssten danach neu gedruckt werden.
+  </p>
+
+  {% if errors %}
+    <ul class="form-errors">
+      {% for error in errors %}<li>{{ error }}</li>{% endfor %}
+    </ul>
+  {% endif %}
+
+  <section class="stammdaten-section">
+    <h2>Export</h2>
+    <p>{{ item_count }} Artikel, {{ category_count }} Kategorien, {{ store_count }} Läden.</p>
+    <a class="button" href="/stammdaten/export.json">Als JSON herunterladen</a>
+    <a class="button" href="/stammdaten/export.csv">Als CSV herunterladen</a>
+  </section>
+
+  <section class="stammdaten-section">
+    <h2>Import</h2>
+    <p class="taxonomy-hint">
+      Legt nur an, was noch nicht existiert. Gibt es auch nur einen Namenskonflikt oder eine
+      unbekannte Kategorie-/Ladenzuordnung, wird der gesamte Import verweigert — bestehende
+      Daten bleiben unangetastet.
+    </p>
+    <form method="post" action="/stammdaten/import" enctype="multipart/form-data">
+      <input type="file" name="file" accept=".json,.csv" required />
+      <button type="submit" class="button button--primary">Importieren</button>
+    </form>
+  </section>
+{% endblock %}

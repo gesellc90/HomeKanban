@@ -24,6 +24,7 @@ from app.web.items import router as items_router
 from app.web.labels import router as labels_router
 from app.web.scan import router as scan_router
 from app.web.shopping import router as shopping_router
+from app.web.stammdaten import router as stammdaten_router
 from app.web.taxonomy import router as taxonomy_router
 
 MIGRATIONS_DIR = Path(__file__).resolve().parent.parent / "migrations"
@@ -54,6 +55,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(labels_router)
     app.include_router(scan_router)
     app.include_router(shopping_router)
+    app.include_router(stammdaten_router)
     app.include_router(taxonomy_router)
 
     return app

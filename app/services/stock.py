@@ -70,6 +70,67 @@ def _require_item(connection: sqlite3.Connection, item_id: int) -> items_repo.It
     return item
 
 
+def book_create_item(
+    connection: sqlite3.Connection,
+    *,
+    name: str,
+    unit: str,
+    stock: int,
+    reorder_level: int,
+    target_stock: int,
+    pack_size: int = 1,
+    category_id: int | None = None,
+    store_id: int | None = None,
+    note: str | None = None,
+    position: int,
+    source: str = "board",
+    lead_days: int = 7,
+) -> int:
+    """Legt einen Artikel an und bucht die anfängliche `opening`-Bewegung **innerhalb einer
+    bereits offenen Transaktion**.
+
+    Aufrufer, die selbst nichts weiter zu schreiben haben, nehmen `create_item()`. Diesen Kern
+    braucht `app/services/stammdaten.py` (M9): Ein Stammdaten-Import legt mehrere Artikel plus
+    Kategorien/Läden atomar an — alles oder nichts, siehe `book_restock()` für dasselbe Muster.
+
+    `qr_token` wird hier vergeben (`secrets.token_urlsafe(16)`); benutzt wird er erst in M3.
+    `lead_days` ist die Vorlaufzeit für den Schwellenvorschlag aus M8 (docs/PLAN.md §9, Frage 4)
+    — seit M8 pro Artikel, der Standardwert 7 spiegelt `HOMEKANBAN_LEAD_DAYS` (app/config.py).
+    """
+    if stock < 0:
+        raise ValueError("Anfangsbestand darf nicht negativ sein")
+
+    now = utc_now_iso()
+    qr_token = secrets.token_urlsafe(16)
+    item_id = items_repo.insert(
+        connection,
+        name=name,
+        unit=unit,
+        note=note,
+        stock=stock,
+        reorder_level=reorder_level,
+        target_stock=target_stock,
+        pack_size=pack_size,
+        category_id=category_id,
+        store_id=store_id,
+        qr_token=qr_token,
+        position=position,
+        created_at=now,
+        updated_at=now,
+        lead_days=lead_days,
+    )
+    movements_repo.insert(
+        connection,
+        item_id=item_id,
+        kind="opening",
+        delta=stock,
+        stock_after=stock,
+        source=source,
+        created_at=now,
+    )
+    return item_id
+
+
 def create_item(
     connection: sqlite3.Connection,
     *,
@@ -86,45 +147,24 @@ def create_item(
     source: str = "board",
     lead_days: int = 7,
 ) -> int:
-    """Legt einen Artikel an und bucht die anfängliche `opening`-Bewegung.
-
-    `qr_token` wird hier vergeben (`secrets.token_urlsafe(16)`); benutzt wird er erst in M3.
-    `lead_days` ist die Vorlaufzeit für den Schwellenvorschlag aus M8 (docs/PLAN.md §9, Frage 4)
-    — seit M8 pro Artikel, der Standardwert 7 spiegelt `HOMEKANBAN_LEAD_DAYS` (app/config.py).
-    """
-    if stock < 0:
-        raise ValueError("Anfangsbestand darf nicht negativ sein")
-
+    """Legt einen Artikel an und bucht die anfängliche `opening`-Bewegung, siehe
+    `book_create_item()`."""
     with transaction(connection):
-        now = utc_now_iso()
-        qr_token = secrets.token_urlsafe(16)
-        item_id = items_repo.insert(
+        return book_create_item(
             connection,
             name=name,
             unit=unit,
-            note=note,
             stock=stock,
             reorder_level=reorder_level,
             target_stock=target_stock,
             pack_size=pack_size,
             category_id=category_id,
             store_id=store_id,
-            qr_token=qr_token,
+            note=note,
             position=position,
-            created_at=now,
-            updated_at=now,
+            source=source,
             lead_days=lead_days,
         )
-        movements_repo.insert(
-            connection,
-            item_id=item_id,
-            kind="opening",
-            delta=stock,
-            stock_after=stock,
-            source=source,
-            created_at=now,
-        )
-    return item_id
 
 
 def withdraw(
