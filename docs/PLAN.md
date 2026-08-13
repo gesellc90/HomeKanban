@@ -10,7 +10,9 @@ Apple-Notes-Export) umgesetzt — mit einem ausstehenden Punkt: die Durchführun
 auf dem iPhone (§9, M4). M5 (Etiketten) umgesetzt — ebenfalls mit einem ausstehenden Punkt:
 Testdruck, Messung der Kalibrierseite und Scanprobe am geklebten Etikett (§9, M5). M7 (Kategorien
 & Ladenzuordnung) umgesetzt — der geänderte Export ist wie M4 noch nicht auf dem iPhone
-durchgespielt worden (§9, M7).
+durchgespielt worden (§9, M7). M8 (Verbrauchshistorie & Prognose) umgesetzt — mit einem
+ausstehenden Punkt: ob die gerechnete Reichweite im echten Haushalt plausibel ist, kann erst
+Wochen echter Buchungen zeigen, keine Testsuite (§9, M8).
 
 ---
 
@@ -150,6 +152,7 @@ Alle Mengen sind Ganzzahlen (L1), alle Zeitstempel UTC-ISO-8601-Text (L9).
 | `reorder_level` | INTEGER NOT NULL | Meldeschwelle |
 | `target_stock` | INTEGER NOT NULL | Sollbestand nach dem Einkauf |
 | `pack_size` | INTEGER NOT NULL DEFAULT 1 | Kaufeinheit für die Rundung |
+| `lead_days` | INTEGER NOT NULL DEFAULT 7 | Vorlaufzeit für den Schwellenvorschlag, seit M8 pro Artikel (`migrations/0003_item_lead_days.sql`, Fragerunde M8 Frage 4, gegen die ursprüngliche Empfehlung aus §10 O3) |
 | `category_id` | INTEGER NULL → `categories` | Spalte ab M1, UI ab M7 |
 | `store_id` | INTEGER NULL → `stores` | Spalte ab M1, UI ab M7 |
 | `qr_token` | TEXT NOT NULL UNIQUE | `secrets.token_urlsafe(16)`, 22 Zeichen |
@@ -158,8 +161,9 @@ Alle Mengen sind Ganzzahlen (L1), alle Zeitstempel UTC-ISO-8601-Text (L9).
 | `created_at`, `updated_at` | TEXT NOT NULL | |
 
 Prüfregeln (in der Domäne **und** als `CHECK`): `stock >= 0`, `reorder_level >= 0`,
-`pack_size >= 1`, `target_stock > reorder_level`. Die letzte Regel ist die wichtigste: wäre
-`target_stock <= reorder_level`, käme der Artikel nach dem Einkauf sofort wieder auf die Liste.
+`pack_size >= 1`, `lead_days >= 1` (seit M8), `target_stock > reorder_level`. Die letzte Regel ist
+die wichtigste: wäre `target_stock <= reorder_level`, käme der Artikel nach dem Einkauf sofort
+wieder auf die Liste — das gilt auch für einen übernommenen Schwellenvorschlag aus M8 (§9).
 
 `category_id` und `store_id` entstehen bereits in M1, obwohl die Oberfläche dazu erst in M7 kommt —
 so muss der Export in M4 nicht später umgebaut werden (die im Prompt angesprochene Abhängigkeit).
@@ -502,7 +506,9 @@ englischen.
 | POST | `/kategorien/{id}` · `/laeden/{id}` | Umbenennen | 7 |
 | POST | `…/{id}/hoch` · `…/{id}/runter` | Umsortieren (Nachbartausch, Grenze = No-Op) | 7 |
 | POST | `…/{id}/loeschen` | Löschen, nur ohne zugeordnete Artikel (Frage 3) | 7 |
-| GET | `/verlauf` · `/artikel/{id}/verlauf` | Journal, Verbrauchsrate, Reichweite | 8 |
+| GET | `/verlauf` | Haushaltsübersicht: aktive Artikel nach Reichweite sortiert | 8 |
+| GET | `/artikel/{id}/verlauf` | vollständiges Journal eines Artikels, Verbrauchsrate, Reichweite, Schwellenvorschlag | 8 |
+| POST | `/artikel/{id}/verlauf/uebernehmen` | Schwellenvorschlag als `reorder_level` übernehmen (Fragerunde M8, Frage 3) | 8 |
 
 **Zum HTMX-Partial (ab M4):** Abhaken und Zurücknehmen antworten nur dann mit dem Zeilen-Partial,
 wenn der Header `HX-Request` gesetzt ist; ohne JavaScript sendet der Browser das darunterliegende
@@ -524,7 +530,7 @@ Alles aus `.env`, Vorlage als `.env.example` im Repo. Keine Geheimnisse in Git.
 | `HOMEKANBAN_DB_PATH` | `/data/homekanban.db` | Volume |
 | `HOMEKANBAN_API_KEY` | — | Pflicht; ohne Wert verweigert der Export-Endpunkt den Dienst |
 | `HOMEKANBAN_UNDO_WINDOW_MINUTES` | `10` | |
-| `HOMEKANBAN_LEAD_DAYS` | `7` | Vorlaufzeit für Schwellenvorschläge (M8) |
+| `HOMEKANBAN_LEAD_DAYS` | `7` | Vorbelegung für `items.lead_days` beim Anlegen eines Artikels — seit M8 (Fragerunde, Frage 4, §10 O3 beantwortet) gilt die Vorlaufzeit pro Artikel und ist danach über die Stammdaten änderbar; diese Variable wirkt nur noch auf neue Artikel |
 | `HOMEKANBAN_BACKUP_DIR` | `/data/backups` | (M9) |
 | `HOMEKANBAN_BACKUP_KEEP` | `7d,4w` | (M9) |
 | `TZ` | `Europe/Berlin` | nur Anzeige, Speicherung bleibt UTC (L9) |
@@ -730,20 +736,53 @@ ohne Zuordnung landen in „Sonstiges“ und verschwinden nicht.
 
 ### M8 — Verbrauchshistorie und Prognose
 
+**Status:** erledigt — **mit einem ausstehenden Punkt:** Ob die gerechnete Reichweite im echten
+Haushalt plausibel ist, kann keine Testsuite zeigen — das braucht Wochen echter Buchungen.
+Synthetische Seed-Daten (`ops/seed.py --history`) beweisen die Rechnung, nicht ihre Tauglichkeit.
+Alles andere aus der Definition of Done ist umgesetzt und getestet.
+
 **Ziel:** Das Journal beantwortet „reicht das noch?“ und schlägt bessere Schwellen vor.
 **Drin:** Verbrauchsrate aus `withdrawal`-Bewegungen der letzten 90 Tage, Reichweite in Tagen,
-Vorschlag `reorder_level = ceil(rate × LEAD_DAYS)` auf Kaufeinheit gerundet, Verlaufsansicht je
-Artikel.
+Vorschlag `reorder_level = ceil(rate × lead_days)` auf Kaufeinheit gerundet, Haushaltsübersicht
+`/verlauf` und vollständige Journalansicht `/artikel/{id}/verlauf` je Artikel.
 **Abhängigkeiten:** M3 (ohne Buchungen keine Daten).
 **Umgang mit dünner Datenlage:** Unter drei Entnahmen oder unter 14 Tagen Historie wird **keine**
 Zahl gezeigt, sondern „zu wenig Daten“. Vorschläge ändern **nie** selbsttätig einen Wert; sie
 werden angezeigt und mit einem Tap übernommen. Gegenbuchungen und ihre Ursprünge fließen nicht in
 die Rate ein, sonst zählt ein korrigierter Fehlscan doppelt.
 **Definition of Done:** Ein Artikel mit zwei Entnahmen zeigt „zu wenig Daten“; ein Artikel mit
-Historie zeigt eine plausible Reichweite; Übernehmen schreibt den Wert und ist im Journal
-nachvollziehbar.
+Historie zeigt eine plausible Reichweite; Übernehmen schreibt den Wert und ist nachvollziehbar
+(über `updated_at`, siehe Frage 3 unten).
 **Testfokus:** Rate bei Lücken, Rate bei genau einer Entnahme, Ausschluss zurückgenommener
 Buchungen, Division durch Null.
+
+**In M8 entschieden** (Fragerunde mit dem Nutzer, CLAUDE.md §1):
+
+- **Frage 1 — Rate-Nenner:** Weder feste 90-Tage-Fensterlänge noch Beobachtungszeitraum ab
+  Artikelanlage (die ursprüngliche Empfehlung), sondern die **Spanne zwischen ältester und
+  jüngster Entnahme** im 90-Tage-Fenster — mit einer Präzisierung in der zweiten Antwortrunde: der
+  Zähler zieht nicht pauschal 1 Stück ab, sondern die **Menge der ältesten Entnahme** von der
+  Gesamtmenge (`rate = (Σ Menge − Menge der ältesten Entnahme) ÷ Tage zwischen ältester und
+  jüngster Entnahme`). Begründung: Die älteste Entnahme markiert den Start der Beobachtung und
+  wird nicht durch die seither vergangene Zeit erklärt — nur was danach folgte, zählt als
+  „Verbrauch innerhalb der Spanne“ (entspricht N−1 Intervallen bei N Zeitpunkten). Umgesetzt in
+  `app/domain/forecast.py::consumption_rate`.
+- **Frage 2 — Seitenzuschnitt:** wie empfohlen — `/verlauf` ist die Haushaltsübersicht „was geht
+  zuerst aus“ (aktive Artikel nach Reichweite sortiert, Artikel mit „zu wenig Daten“ in einem
+  eigenen, ruhigen Abschnitt am Ende). `/artikel/{id}/verlauf` ist die vollständige, ungekürzte
+  Journalansicht mitsamt Prognose und Übernehmen-Weg. Die kurze 20er-Vorschau auf
+  `/artikel/{id}` bleibt bestehen und verlinkt auf die vollständige Ansicht.
+- **Frage 3 — Nachvollziehbarkeit der Übernahme:** wie empfohlen (Variante b) — die Definition of
+  Done „im Journal nachvollziehbar“ wird präzisiert zu „über `updated_at` nachvollziehbar, wie
+  jede andere Stammdatenänderung“. `app/repo/items.py::update_reorder_level` schreibt **nur**
+  `reorder_level` und `updated_at`, ohne Bewegung in `movements` — eine Schwellenänderung dort
+  wäre eine Lüge im Bestandsjournal (L2) und würde als Inventur erscheinen, die keine war. Keine
+  zweite Journaltabelle, kein neues ADR (nur nötig gewesen bei Variante a).
+- **Frage 4 — `HOMEKANBAN_LEAD_DAYS` (O3 aus §10):** entschieden **gegen** die ursprüngliche
+  Empfehlung „global“ — die Vorlaufzeit gilt **pro Artikel** (`items.lead_days`,
+  `migrations/0003_item_lead_days.sql`, additiv, `NOT NULL DEFAULT 7`, `CHECK (lead_days >= 1)`).
+  `HOMEKANBAN_LEAD_DAYS` bleibt als Vorbelegung beim Anlegen eines neuen Artikels bestehen, ist
+  danach aber über die Stammdaten wie `reorder_level` oder `pack_size` änderbar.
 
 ### M9 — Backup und Restore
 
@@ -806,7 +845,6 @@ Geräten geprüft wird, oder in einen eigenen `fix/`-Durchgang davor.
 
 | # | Frage | Empfehlung |
 | --- | --- | --- |
-| O3 | Soll `HOMEKANBAN_LEAD_DAYS` global gelten oder pro Artikel? Klopapier hat eine andere Vorlaufzeit als Kaffee. | Erst global mit 7 Tagen; pro Artikel nur, wenn M8 zeigt, dass es nötig ist. |
 | O4 | Wer soll Artikel anlegen dürfen — alle im Haushalt oder nur du? | Alle. Ohne Login ist die Alternative ohnehin nur eine Bitte, und Archivieren ist reversibel. |
 
 **O1 — beantwortet (M4):** Beides, mit klarer Gewichtung. „Alles gekauft“ ist der große
@@ -815,6 +853,11 @@ Sollbestand; darunter hat jede Position ein eigenes Häkchen und ein Mengenfeld 
 Damit kostet der Heimweg im Normalfall einen Tap (R2), und der Kaffee-Fall aus Szenario 2 —
 nur eine statt zwei Packungen bekommen — bleibt ohne Umweg über die Inventur buchbar.
 Umgesetzt als `POST /liste/{id}/alles-gekauft` (§7).
+
+**O3 — beantwortet (M8):** Gegen die ursprüngliche Empfehlung „erst global“ — `lead_days` gilt
+**pro Artikel** (`items.lead_days`, `migrations/0003_item_lead_days.sql`). `HOMEKANBAN_LEAD_DAYS`
+bleibt als Vorbelegung für neu angelegte Artikel bestehen, ist danach aber wie jedes andere
+Stammdatum änderbar. Details und Begründung: §9, M8, Frage 4.
 
 **O2 — beantwortet:** Der Pi ist im Heimnetz unter der festen Adresse `192.168.0.15` erreichbar;
 „Hängt!“ läuft aktuell **ohne** Reverse Proxy davor, ein Proxy ist im Projekt „Hängt!“ aber

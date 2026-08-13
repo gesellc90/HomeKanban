@@ -68,7 +68,14 @@ Rate nicht bei Entscheidungen, die dem Nutzer gehören.
   (Konstante `MISC_LABEL`), Umsortieren (Positionstausch bei Kategorie/Laden, nicht zu verwechseln
   mit `reorder` = Nachkaufen) → `swap_positions`, eingefrorener Stand von Laden/Kategorie zum
   Anfügezeitpunkt einer Listenposition → `store_snapshot`/`category_snapshot`
-  (`store_position_snapshot`/`category_position_snapshot`).
+  (`store_position_snapshot`/`category_position_snapshot`), Verbrauchsrate → `consumption_rate`
+  (Feld `per_day` auf `ConsumptionRate`, `app/domain/forecast.py`), Reichweite → `reach`
+  (`estimate_reach`, `ReachEstimate.days`; unbegrenzte Reichweite bei Rate 0 → `is_unlimited`),
+  Prognose → `forecast` (`app/domain/forecast.py`, `app/web/history.py`), Vorlaufzeit →
+  `lead_days` (seit M8 Spalte auf `items`, zuvor nur `HOMEKANBAN_LEAD_DAYS`), „zu wenig Daten“ →
+  `has_enough_data` (Feld auf `ConsumptionRate`/`ReachEstimate`, bewusst kein `None`, das
+  versehentlich als 0 durchgehen könnte), Beobachtungszeitraum → `observed_days` (Spanne zwischen
+  ältester und jüngster Entnahme im Ratenfenster, nicht die Fensterlänge selbst).
   Erweitere das Glossar, wenn ein neuer Begriff dazukommt.
 
 ## 3. Gesetzte Entscheidungen
