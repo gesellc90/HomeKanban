@@ -7,17 +7,17 @@ Fehlerklasse, die diese Invariante eigentlich ausschließt, soll sichtbar bleibe
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
+from app.deps import DbConnection
 from app.repo.movements import find_ledger_invariant_violations
 
 router = APIRouter()
 
 
 @router.get("/healthz")
-def healthz(request: Request) -> JSONResponse:
-    connection = request.app.state.db
+def healthz(connection: DbConnection) -> JSONResponse:
     connection.execute("SELECT 1")
 
     violating_item_ids = find_ledger_invariant_violations(connection)

@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
+from app.deps import DbConnection
 from app.domain.quantities import reorder_quantity
 from app.domain.status import ItemStatus, derive_status
 from app.repo import items as items_repo
@@ -29,9 +30,7 @@ class BoardEntry:
 
 
 @router.get("/", response_class=HTMLResponse)
-def board(request: Request) -> HTMLResponse:
-    connection = request.app.state.db
-
+def board(request: Request, connection: DbConnection) -> HTMLResponse:
     active_items = items_repo.list_active(connection)
     open_list_item_ids = shopping_lists_repo.open_unchecked_item_ids(
         connection, (item.id for item in active_items)

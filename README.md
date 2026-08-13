@@ -5,16 +5,19 @@ Raspberry Pi, parallel zur bestehenden Web-App „Hängt! – jeder Strich zähl
 
 > **Status: M0–M5 und M7–M9 umgesetzt (Fundament, Domänenmodell & Persistenz, Board &
 > Artikelpflege, QR-Entnahme-Flow, Einkaufsliste & Apple-Notes-Export, Etiketten, Kategorien &
-> Ladenzuordnung, Verbrauchshistorie & Prognose, Backup & Restore).**
-> Vier Punkte stehen noch aus, alle brauchen ein iPhone, einen Drucker, Wochen echter Nutzung oder
+> Ladenzuordnung, Verbrauchshistorie & Prognose, Backup & Restore). M6 (Deployment) ist
+> vorbereitet — Härtung, R7-Fix und Betriebshandbuch stehen, die Durchführung auf dem Pi steht
+> aus.**
+> Fünf Punkte stehen noch aus, alle brauchen ein iPhone, einen Drucker, Wochen echter Nutzung oder
 > den Pi selbst statt Code: Der iOS-Kurzbefehl aus M4 ist noch nicht auf dem iPhone durchgeführt
 > worden — das gilt seit M7 auch für den geänderten, gruppierten Export
 > ([`docs/KURZBEFEHL.md`](docs/KURZBEFEHL.md)) —, die Etiketten aus M5 sind noch nicht gedruckt,
 > gemessen und gescannt ([`ops/ETIKETTEN.md`](ops/ETIKETTEN.md)), ob die in M8 gerechnete
 > Reichweite im echten Haushalt plausibel ist, kann erst echte Buchungshistorie zeigen, keine
-> Testsuite, und der Container-Teil des M9-Restores sowie der Cron-Lauf und die Kopie eines
-> Backups auf ein Gerät außerhalb des Pi sind mangels Docker/Pi in der Entwicklungsumgebung
-> ungeprüft ([`ops/BACKUP.md`](ops/BACKUP.md)).
+> Testsuite, der Container-Teil des M9-Restores sowie der Cron-Lauf und die Kopie eines Backups
+> auf ein Gerät außerhalb des Pi sind mangels Docker/Pi in der Entwicklungsumgebung ungeprüft
+> ([`ops/BACKUP.md`](ops/BACKUP.md)), und der komplette Einrichtungsdurchlauf auf dem Pi selbst
+> steht noch aus ([`ops/BETRIEB.md`](ops/BETRIEB.md)).
 > Anforderungen und Rahmen: [`docs/PROJEKT-PROMPT.md`](docs/PROJEKT-PROMPT.md).
 > Architektur, Datenmodell, Meilensteine, Risiken: [`docs/PLAN.md`](docs/PLAN.md).
 
@@ -52,7 +55,7 @@ abhakbare Checkliste in Apple Notes holt.
 | M3 | QR-Entnahme-Flow | erledigt |
 | M4 | Einkaufsliste & Apple-Notes-Export | erledigt — iPhone-Verifikation des Kurzbefehls steht aus |
 | M5 | Etiketten (Einzel-QR + Druckbögen) | erledigt — Testdruck, Messung und Scanprobe stehen aus |
-| M6 | Deployment auf dem Raspberry Pi | offen |
+| M6 | Deployment auf dem Raspberry Pi | vorbereitet — Durchführung auf dem Pi steht aus |
 | M7 | Kategorien & Ladenzuordnung | erledigt — iPhone-Verifikation des geänderten Exports steht aus |
 | M8 | Verbrauchshistorie & Prognose | erledigt — Plausibilität der Reichweite im echten Haushalt steht aus |
 | M9 | Backup & Restore | erledigt — Container-Teil des Restores, Cron-Lauf und externe Kopie stehen aus |
@@ -65,8 +68,8 @@ trotzdem über einen mDNS-Hostnamen statt der festen IP angesprochen, damit die 
 QR-Etiketten einen Hardware- oder Adresswechsel überleben. Seit M5 steht der Wert fest:
 `http://homekanban.local:8181` — er steckt in jedem gedruckten Code und ist ohne Neudruck nicht
 mehr zu ändern (`docs/PLAN.md` §8, R6). Der mDNS-Alias auf dem Pi und der Nachweis, dass Port
-`8181` frei ist (`ss -ltnp`), gehören nach M6 — beides muss aber **vor** dem ersten Etikettendruck
-erledigt sein.
+`8181` frei ist (`ss -ltnp`), sind Teil des M6-Durchlaufs ([`ops/BETRIEB.md`](ops/BETRIEB.md)
+Phase 1/2) — beides muss aber **vor** dem ersten Etikettendruck erledigt sein.
 
 ## Tests laufen lokal — nicht in der Cloud
 
@@ -106,7 +109,10 @@ docs/PROJEKT-PROMPT.md           Anforderungen, Technologie-Rahmen, Meilensteine
 docs/PLAN.md                     Detailplanung: Architektur, Datenmodell, Risiken, Szenarien
 docs/KURZBEFEHL.md               Anleitung für den iOS-Kurzbefehl (Apple Notes / Erinnerungen)
 docs/adr/                        Architekturentscheidungen, je eine Datei
+ops/BETRIEB.md                   Betriebshandbuch: Start/Stopp/Update, Pi-Einrichtungsdurchlauf
+ops/BACKUP.md                    Sicherung, Aufbewahrung, Restore, Stammdaten-Export/-Import
 ops/ETIKETTEN.md                 Etikettenformat, Größe, Scanreichweite, Schritte vor dem Druck
+ops/preflight.sh                 optionaler Vorbedingungs-Check vor dem Pi-Durchlauf
 .githooks/                       versionierte Git-Hooks (pre-commit, pre-push)
 .github/                         PR- und Issue-Vorlagen (keine Workflows)
 ```

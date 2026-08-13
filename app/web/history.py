@@ -31,6 +31,7 @@ from datetime import UTC, datetime, timedelta
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
+from app.deps import DbConnection
 from app.domain import forecast
 from app.repo import items as items_repo
 from app.repo import movements as movements_repo
@@ -77,9 +78,7 @@ def _reach_sort_key(entry: _ReachEntry) -> tuple[int, float]:
 
 
 @router.get("/verlauf", response_class=HTMLResponse)
-def household_overview(request: Request) -> HTMLResponse:
-    connection = request.app.state.db
-
+def household_overview(request: Request, connection: DbConnection) -> HTMLResponse:
     active_items = items_repo.list_active(connection)
     since = _since_iso(now=datetime.now(UTC), window_days=forecast.RATE_WINDOW_DAYS)
     withdrawals_by_item: dict[int, list[MovementRow]] = {}
@@ -153,14 +152,15 @@ def _render_item_history(
 
 
 @router.get("/artikel/{item_id}/verlauf", response_class=HTMLResponse)
-def item_history(request: Request, item_id: int) -> HTMLResponse:
-    connection = request.app.state.db
+def item_history(request: Request, item_id: int, connection: DbConnection) -> HTMLResponse:
     item = _require_item(connection, item_id)
     return _render_item_history(request, connection, item)
 
 
 @router.post("/artikel/{item_id}/verlauf/uebernehmen", response_model=None)
-def take_over_suggestion(request: Request, item_id: int) -> HTMLResponse | RedirectResponse:
+def take_over_suggestion(
+    request: Request, item_id: int, connection: DbConnection
+) -> HTMLResponse | RedirectResponse:
     """Übernimmt den aktuell gültigen Schwellenvorschlag als `reorder_level`.
 
     Nimmt bewusst **keine** Formularwerte vom Client entgegen und rechnet den Vorschlag frisch aus
@@ -168,7 +168,6 @@ def take_over_suggestion(request: Request, item_id: int) -> HTMLResponse | Redir
     geschrieben werden. Das deckt nebenbei den Fall ab, dass die Datenlage zwischen Seitenaufruf
     und Klick unter die Sperre gerutscht ist (z. B. durch ein Undo).
     """
-    connection = request.app.state.db
     item = _require_item(connection, item_id)
 
     if item.archived_at is not None:

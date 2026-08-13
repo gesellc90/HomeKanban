@@ -1,6 +1,7 @@
 # 0005 — Idempotente Entnahmebuchung über Unique-Index statt Vorab-Prüfung
 
-- **Status:** entschieden
+- **Status:** teilweise ersetzt durch 0008 (nur der `threading.Lock` um `transaction()`; die
+  Idempotenzprüfung selbst gilt unverändert)
 - **Datum:** 2026-08-11
 - **Meilenstein:** M3
 
@@ -59,7 +60,7 @@ Damit das im Ernstfall tatsächlich einen `IntegrityError` statt eines `Operatio
 - **Verbindung pro Request statt einer geteilten `app.state.db`:** Würde das Lock-Problem
   strukturell umgehen, ist aber eine größere Änderung am Verbindungsmodell aus M0/M1 und gehört
   eher zur echten Mehrgeräte-Prüfung in M6 (R7: „In M6 mit zwei Geräten geprüft“) als in diesen
-  Durchgang. Zurückgestellt.
+  Durchgang. Zurückgestellt — **umgesetzt in M6, siehe ADR 0008.**
 
 ## Konsequenzen
 
@@ -67,9 +68,11 @@ Ein zweites Absenden desselben Formulars — ob nacheinander oder echt gleichzei
 oder über zwei verschiedene Verbindungen — bucht nachweislich genau einmal (siehe
 `tests/services/test_stock.py::TestWithdrawIdempotency`,
 `tests/services/test_stock.py::TestConcurrentWithdraw`,
-`tests/web/test_scan.py::TestConcurrentDoubleTap`). Der Preis: jede Schreibtransaktion der App
-läuft jetzt durch einen gemeinsamen Lock, was bei echter Mehrgeräte-Last aus mehreren
-Haushaltsmitgliedern (R7) zu kurzen Wartezeiten führen kann — bei kurzen Transaktionen
-(eine Buchung) vernachlässigbar, aber ein Punkt, den die manuelle Zwei-Geräte-Prüfung in M6
-noch einmal am echten Pi bestätigen sollte. Wird das je zum Engpass, ist der nächste Schritt eine
-Verbindung pro Request statt der geteilten `app.state.db` — das wäre dann ein eigenes ADR.
+`tests/web/test_scan.py::TestConcurrentDoubleTap`).
+
+**Nachtrag M6 (ADR 0008):** Der hier beschriebene `threading.Lock` um `transaction()` sicherte nur
+die Transaktionen der einen geteilten `app.state.db`-Verbindung ab, nicht Lesezugriffe außerhalb
+einer Transaktion — das blieb bis M6 ein offener Defekt (docs/PLAN.md §10, „Offener Defekt zu
+R7“). ADR 0008 ersetzt die geteilte Verbindung durch eine Verbindung je Anfrage und den Lock
+dadurch ersatzlos; die Idempotenzprüfung selbst (Vorab-`SELECT` + `IntegrityError`-Abfang auf dem
+UNIQUE-Index) bleibt unverändert wie oben beschrieben.

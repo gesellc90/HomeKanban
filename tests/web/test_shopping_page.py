@@ -6,9 +6,17 @@ jede Fehlbedienung auf einer verständlichen deutschen Seite endet statt in eine
 
 from __future__ import annotations
 
+import sqlite3
+
 from fastapi.testclient import TestClient
 
+from app.db import connect
+
 HTMX_HEADERS = {"HX-Request": "true"}
+
+
+def _connection(client: TestClient) -> sqlite3.Connection:
+    return connect(client.app.state.settings.db_path)  # type: ignore[attr-defined]
 
 
 def _create_item(
@@ -41,26 +49,34 @@ def _create_list(client: TestClient) -> int:
     response = client.post("/liste/erzeugen", follow_redirects=False)
     assert response.status_code == 303
     assert response.headers["location"] == "/liste"
-    row = client.app.state.db.execute(  # type: ignore[attr-defined]
-        "SELECT id FROM shopping_lists WHERE status = 'open'"
-    ).fetchone()
+    connection = _connection(client)
+    try:
+        row = connection.execute("SELECT id FROM shopping_lists WHERE status = 'open'").fetchone()
+    finally:
+        connection.close()
     assert row is not None
     return int(row["id"])
 
 
 def _line_ids(client: TestClient, list_id: int) -> list[int]:
-    rows = client.app.state.db.execute(  # type: ignore[attr-defined]
-        "SELECT id FROM shopping_list_lines WHERE list_id = ? AND dropped_at IS NULL "
-        "ORDER BY position",
-        (list_id,),
-    ).fetchall()
+    connection = _connection(client)
+    try:
+        rows = connection.execute(
+            "SELECT id FROM shopping_list_lines WHERE list_id = ? AND dropped_at IS NULL "
+            "ORDER BY position",
+            (list_id,),
+        ).fetchall()
+    finally:
+        connection.close()
     return [int(row["id"]) for row in rows]
 
 
 def _stock(client: TestClient, item_id: int) -> int:
-    row = client.app.state.db.execute(  # type: ignore[attr-defined]
-        "SELECT stock FROM items WHERE id = ?", (item_id,)
-    ).fetchone()
+    connection = _connection(client)
+    try:
+        row = connection.execute("SELECT stock FROM items WHERE id = ?", (item_id,)).fetchone()
+    finally:
+        connection.close()
     return int(row["stock"])
 
 
@@ -103,9 +119,11 @@ def test_list_page_shows_a_sonstiges_heading_for_unassigned_items(client: TestCl
 
 def test_list_page_groups_lines_by_store(client: TestClient) -> None:
     client.post("/laeden", data={"name": "REWE"})
-    store_row = client.app.state.db.execute(  # type: ignore[attr-defined]
-        "SELECT id FROM stores WHERE name = 'REWE'"
-    ).fetchone()
+    connection = _connection(client)
+    try:
+        store_row = connection.execute("SELECT id FROM stores WHERE name = 'REWE'").fetchone()
+    finally:
+        connection.close()
     store_id = store_row["id"]
     item_id = _create_item(client, name="Klopapier", unit="Rolle", stock=0)
     client.post(

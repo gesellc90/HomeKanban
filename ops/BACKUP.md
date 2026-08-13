@@ -1,9 +1,8 @@
 # Backup und Restore
 
-Kurznotiz aus M9 (docs/PLAN.md §9), nach dem Vorbild von [`ops/ETIKETTEN.md`](ETIKETTEN.md).
-`ops/BETRIEB.md` bleibt M6 vorbehalten (Start/Stopp/Update/Log/Portprüfung) und verweist später
-hierher — solange M6 aussteht, ist diese Datei der vollständige Weg für Sicherung und
-Wiederherstellung.
+Kurznotiz aus M9 (docs/PLAN.md §9), nach dem Vorbild von [`ops/ETIKETTEN.md`](ETIKETTEN.md), in M6
+korrigiert und um die entschiedenen Wege ergänzt. [`ops/BETRIEB.md`](BETRIEB.md) verweist hierher
+(Phase 11/12) statt den Inhalt zu duplizieren.
 
 ## Was gesichert wird — und was nicht
 
@@ -34,36 +33,29 @@ erfolgreicher Lauf meldet den geschriebenen Dateinamen und was die Aufbewahrungs
 hat; ein fehlgeschlagener Lauf endet mit einer deutschen Meldung auf stderr und einem von Null
 verschiedenen Exit-Code — nie mit einem Stacktrace.
 
-### Zwei Aufrufwege — die Datenbank liegt in einem benannten Docker-Volume
+### Der Cron-Lauf — im Container (M6-Fragerunde, Frage 2)
 
 `ops/compose.yaml` legt die Datenbank in das **benannte** Volume `homekanban-data`, nicht in
-einen Bind-Mount. Ein Host-Cron sieht `/data/homekanban.db` deshalb **nicht** ohne Weiteres.
-Solange M6 das nicht löst, bleiben zwei Wege, und `ops/backup.py` selbst trifft keine Annahme über
-`/data` — beide funktionieren mit denselben `--db-path`/`--backup-dir`-Optionen:
-
-**a) Im Container** (einfachster Weg, kein zusätzlicher Mount nötig):
+einen Bind-Mount. Ein Host-Cron sieht `/data/homekanban.db` deshalb nicht ohne Weiteres.
+`ops/BACKUP.md` beschrieb dafür in M9 zwei mögliche Wege und entschied keinen — **entschieden in
+M6, gegen die ursprüngliche Empfehlung „Bind-Mount + Host-Cron“:** alles bleibt im Container. Der
+Cron-Eintrag steht auf dem **Host**, ruft aber `docker compose exec` auf:
 
 ```cron
 # Jeden Tag um 3:10 Uhr, im Container gegen die Container-Pfade
-10 3 * * * docker compose -f /pfad/zu/ops/compose.yaml exec -T homekanban \
+10 3 * * * cd /pfad/zum/repo/ops && docker compose --env-file ../.env exec -T homekanban \
   python ops/backup.py --db-path /data/homekanban.db --backup-dir /data/backups
 ```
 
-Das Sicherungsverzeichnis liegt dann **innerhalb** desselben Volumes wie die Datenbank — sicher
-gegen den Verlust der SQLite-Datei selbst, aber **nicht** gegen den Verlust der ganzen SD-Karte,
-solange kein zusätzlicher Bind-Mount oder Kopierschritt nach draußen führt (siehe unten).
+Damit das im Container überhaupt funktioniert, kopiert `ops/Dockerfile` seit M6 `ops/backup.py`
+und `ops/restore.py` mit ins Image (`COPY ops/backup.py ops/restore.py ./ops/`) — **vorher war das
+ein Defekt aus M9**: `ops/` lag nicht im Image, `docker compose exec … python ops/backup.py` wäre
+mit „Datei nicht gefunden“ gescheitert.
 
-**b) Auf dem Host**, mit einem zusätzlichen Bind-Mount nur für das Sicherungsverzeichnis (in
-`ops/compose.yaml` zu ergänzen, z. B. `- /pfad/auf/dem/host/backups:/data/backups`):
-
-```cron
-10 3 * * * cd /pfad/zum/repo && .venv/bin/python ops/backup.py \
-  --db-path /var/lib/docker/volumes/.../homekanban.db --backup-dir /pfad/auf/dem/host/backups
-```
-
-Weg (b) ist der, der die Sicherung tatsächlich von der SD-Karte herunterbekommt, ohne
-`docker exec`. **Welcher der beiden Wege auf dem Pi eingerichtet wird, ist noch offen** — das
-gehört zu M6, wenn Compose gehärtet und der Bind-Mount tatsächlich ergänzt wird.
+**Konsequenz für R5:** Das Sicherungsverzeichnis liegt dadurch weiterhin **innerhalb** desselben
+benannten Volumes wie die Datenbank — sicher gegen eine beschädigte oder gelöschte
+`homekanban.db`, aber **nicht** gegen den Verlust der ganzen SD-Karte. Ein Backup-Ziel außerhalb
+des Pi ist eine eigene, noch offene Baustelle — siehe unten.
 
 ## Aufbewahrung
 
@@ -80,41 +72,64 @@ Backup wird nie gelöscht, unabhängig von der konfigurierten Regel.
 
 ## Backup-Ziel außerhalb des Pi
 
-**Entschieden (Fragerunde M9, Frage 4):** In diesem Durchgang **nichts automatisiert** — R5
-verlangt ein Backup-Ziel außerhalb des Pi, aber welches Gerät im Haushalt dafür infrage kommt, war
-zum Zeitpunkt dieses Durchgangs noch nicht entschieden. `ops/backup.py` schreibt bewusst
-ausschließlich lokal nach `HOMEKANBAN_BACKUP_DIR` und kennt kein Zielsystem.
+**Weiterhin offen** — schon in M9 zurückgestellt (Frage 4 dort) und in der M6-Fragerunde erneut
+gefragt: Noch immer steht kein Gerät im Haushalt dafür fest (USB-Platte am Pi, NAS, Laptop). R5
+bleibt damit zum Teil ungelöst — solange nur innerhalb des Volumes gesichert wird, schützt das
+Backup vor einer beschädigten `homekanban.db`, aber **nicht** vor dem Verlust der ganzen SD-Karte.
+`ops/backup.py` schreibt bewusst ausschließlich lokal nach `HOMEKANBAN_BACKUP_DIR` und kennt kein
+Zielsystem — das bleibt unverändert.
 
-**Bis dahin: von Hand.** Das Sicherungsverzeichnis (`HOMEKANBAN_BACKUP_DIR`, per Cron-Weg (b) auf
-dem Host sichtbar) regelmäßig auf ein zweites Gerät kopieren — USB-Stick, Laptop, NAS, was auch
-immer im Haushalt vorhanden ist. Ein Backup, das nur auf derselben SD-Karte liegt wie die
-Datenbank, übersteht einen Kartentod nicht. Sobald ein Gerät feststeht, gehört das hier als zweiter
-Cron-Eintrag (`rsync`/`scp`, Schlüssel außerhalb des Repos) ergänzt.
+**Bis ein Gerät feststeht: von Hand, aus dem Volume heraus.** Weil das Sicherungsverzeichnis seit
+M6 im Container liegt (Frage 2), reicht ein Blick in den Bind-Mount nicht mehr — die Datei muss
+aus dem laufenden Container kopiert werden:
+
+```sh
+cd /pfad/zum/repo/ops
+docker compose --env-file ../.env cp homekanban:/data/backups/20260813T031000Z.db.gz .
+```
+
+Diese Kopie dann auf ein zweites Gerät bringen — USB-Stick, Laptop, NAS, was auch immer im
+Haushalt vorhanden ist. Sobald ein Gerät feststeht, gehört das hier als eigener, automatisierter
+Schritt ergänzt (z. B. ein zweiter Cron-Eintrag, der zuerst `docker compose cp` und danach
+`rsync`/`scp` mit einem Schlüssel außerhalb des Repos ausführt).
 
 ## Restore — Schritt für Schritt
 
-1. **Container stoppen.** `docker compose stop homekanban` (oder `down`). Läuft die App weiter,
-   entstehen sofort wieder frische `-wal`/`-shm`-Dateien gegen die alte Datenbank, während der
-   Restore eine neue unterschiebt.
-2. **Zurückspielen:**
+Ausgeführt vom Repo-Verzeichnis `ops/` aus, mit derselben `--env-file ../.env`-Angewohnheit wie
+beim Backup-Cron (siehe oben und ops/compose.yaml).
+
+1. **Container anhalten, Volume aber verfügbar lassen:** `docker compose --env-file ../.env stop
+   homekanban` (**nicht** `down -v` — das würde das Volume und damit alle Backups löschen). Läuft
+   die App weiter, entstehen sofort wieder frische `-wal`/`-shm`-Dateien gegen die alte Datenbank,
+   während der Restore eine neue unterschiebt.
+2. **Zurückspielen — im Container, mit `run` statt `exec`** (der reguläre Dienst steht ja gerade
+   still):
 
    ```sh
-   python ops/restore.py --backup-file /pfad/zur/20260813T115650Z.db.gz --db-path /data/homekanban.db
+   docker compose --env-file ../.env run --rm homekanban \
+     python ops/restore.py --backup-file /data/backups/20260813T115650Z.db.gz \
+     --db-path /data/homekanban.db
    ```
 
    `ops/restore.py` prüft das Backup (`PRAGMA integrity_check` + Kerntabellen), **bevor** eine
    vorhandene Datenbank überhaupt angefasst wird. Eine vorhandene Datenbank wird **nie gelöscht**,
    sondern nach `<name>.vor-restore-<Zeitstempel>` verschoben (CLAUDE.md §4) — inklusive
    liegengebliebener `-wal`/`-shm`-Dateien, die sonst gegen den frisch restaurierten Stand
-   abgespielt würden und ihn verfälschen könnten.
-3. **Container wieder starten:** `docker compose up -d`.
+   abgespielt würden und ihn verfälschen könnten. Kommt das Backup von einem externen Gerät statt
+   aus `/data/backups` selbst, es zuerst mit `docker compose --env-file ../.env cp
+   <lokale-datei>.db.gz homekanban:/data/backups/` ins Volume kopieren.
+3. **Container wieder starten:** `docker compose --env-file ../.env up -d`.
 4. **Nachweis:** `GET /healthz` aufrufen. `{"status": "ok"}` heißt: die Journal-Invariante
    `SUM(movements.delta) == items.stock` (L2) hält über die gesamte restaurierte Datenbank. Ein
    Blick aufs Board bestätigt zusätzlich, dass der erwartete Bestand wieder da ist.
 
-Dieser Rundlauf wurde im Rahmen von M9 tatsächlich durchgeführt — mit einer echten Datenbankdatei
-und der laufenden App (Docker war in der Entwicklungsumgebung nicht verfügbar, der
-Container-spezifische Teil bleibt daher ungeprüft, siehe docs/PLAN.md §9, M9).
+Der fachliche Ablauf (Backup schreiben, Datenbankdatei entfernen, restaurieren, `/healthz` und
+Board prüfen) wurde im Rahmen von M9 tatsächlich durchgeführt — mit einer echten Datenbankdatei und
+der laufenden App über `uvicorn`, weil in der Entwicklungsumgebung kein Docker-Daemon lief (siehe
+docs/PLAN.md §9, M9). Die obigen Container-Befehle sind für M6 syntaktisch geprüft
+(`docker compose config`, siehe `ops/BETRIEB.md`), aber **ein echter Restore-Rundlauf mit
+laufendem Container steht weiterhin aus** — das ist genau der Nachweis, den `ops/BETRIEB.md`
+Phase 12 am Pi verlangt.
 
 ## Was tun, wenn die Karte tot ist
 
@@ -145,9 +160,10 @@ die ursprüngliche Empfehlung, aber mit dem Nutzer so entschieden):
 
 ## Was hier ungeprüft bleibt
 
-- Der tatsächliche Cron-Lauf auf dem Pi (beide Aufrufwege oben sind nur beschrieben, nicht auf
-  echter Pi-Hardware ausgeführt).
-- Der Zugriff auf das benannte Docker-Volume aus einem Host-Cron heraus.
-- Die Kopie auf ein Gerät außerhalb des Pi — welches Gerät das wird, ist offen (siehe oben).
-- Der Container-Teil des Restore-Rundlaufs (`docker compose stop`/`up`) — in der
-  Entwicklungsumgebung ohne Docker durchgeführt, siehe oben.
+- Der tatsächliche Cron-Lauf auf dem Pi (der Aufrufweg oben ist mit `docker compose config`
+  syntaktisch geprüft, aber nicht auf echter Pi-Hardware ausgeführt).
+- Die Kopie auf ein Gerät außerhalb des Pi — welches Gerät das wird, ist weiterhin offen (siehe
+  oben, M6-Fragerunde Frage 3).
+- Der Container-Teil des Restore-Rundlaufs (`docker compose stop`/`run`/`up`) — in der
+  Entwicklungsumgebung ohne laufenden Docker-Daemon durchgeführt, siehe oben. Nachweis folgt in
+  `ops/BETRIEB.md` Phase 12.

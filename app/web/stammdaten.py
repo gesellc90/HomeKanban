@@ -13,12 +13,14 @@ ist nur Formular- und Fehlerdarstellung, wie `app/web/taxonomy.py`.
 
 from __future__ import annotations
 
+import sqlite3
 from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, File, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
+from app.deps import DbConnection
 from app.domain.stammdaten import StammdatenExport, StammdatenFormatError, from_csv, from_json
 from app.domain.stammdaten import to_csv as stammdaten_to_csv
 from app.domain.stammdaten import to_json as stammdaten_to_json
@@ -43,11 +45,11 @@ def _download_filename(suffix: str) -> str:
 
 def _render_page(
     request: Request,
+    connection: sqlite3.Connection,
     *,
     status_code: int = 200,
     errors: list[str] | None = None,
 ) -> HTMLResponse:
-    connection = request.app.state.db
     export = stammdaten_service.export_stammdaten(connection)
     context: dict[str, Any] = {
         "item_count": len(export.items),
@@ -59,13 +61,13 @@ def _render_page(
 
 
 @router.get("/stammdaten", response_class=HTMLResponse)
-def stammdaten_page(request: Request) -> HTMLResponse:
-    return _render_page(request)
+def stammdaten_page(request: Request, connection: DbConnection) -> HTMLResponse:
+    return _render_page(request, connection)
 
 
 @router.get("/stammdaten/export.json", response_model=None)
-def export_json(request: Request) -> Response:
-    data = stammdaten_service.export_stammdaten(request.app.state.db)
+def export_json(connection: DbConnection) -> Response:
+    data = stammdaten_service.export_stammdaten(connection)
     return Response(
         content=stammdaten_to_json(data),
         media_type=_JSON_MEDIA_TYPE,
@@ -74,8 +76,8 @@ def export_json(request: Request) -> Response:
 
 
 @router.get("/stammdaten/export.csv", response_model=None)
-def export_csv(request: Request) -> Response:
-    data = stammdaten_service.export_stammdaten(request.app.state.db)
+def export_csv(connection: DbConnection) -> Response:
+    data = stammdaten_service.export_stammdaten(connection)
     return Response(
         content=stammdaten_to_csv(data),
         media_type=_CSV_MEDIA_TYPE,
@@ -112,16 +114,18 @@ def _parse_upload(filename: str, raw_bytes: bytes) -> StammdatenExport | list[st
 
 @router.post("/stammdaten/import", response_model=None)
 async def import_stammdaten_upload(
-    request: Request, file: UploadFile = _FILE_UPLOAD
+    request: Request,
+    connection: DbConnection,
+    file: UploadFile = _FILE_UPLOAD,
 ) -> HTMLResponse | RedirectResponse:
     raw_bytes = await file.read()
     parsed = _parse_upload(file.filename or "", raw_bytes)
     if isinstance(parsed, list):
-        return _render_page(request, status_code=422, errors=parsed)
+        return _render_page(request, connection, status_code=422, errors=parsed)
 
     try:
-        stammdaten_service.import_stammdaten(request.app.state.db, parsed)
+        stammdaten_service.import_stammdaten(connection, parsed)
     except stammdaten_service.StammdatenImportRejectedError as error:
-        return _render_page(request, status_code=409, errors=error.errors)
+        return _render_page(request, connection, status_code=409, errors=error.errors)
 
     return RedirectResponse("/stammdaten", status_code=303)

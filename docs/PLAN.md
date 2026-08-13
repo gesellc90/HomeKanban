@@ -15,7 +15,11 @@ ausstehenden Punkt: ob die gerechnete Reichweite im echten Haushalt plausibel is
 Wochen echter Buchungen zeigen, keine Testsuite (§9, M8). M9 (Backup & Restore) umgesetzt — mit
 einem ausstehenden Punkt: der Container-Teil des Restore-Rundlaufs ist mangels Docker in der
 Entwicklungsumgebung ungeprüft, ebenso der Cron-Lauf und die Kopie auf ein Gerät außerhalb des Pi
-(§9, M9).
+(§9, M9). M6 (Deployment auf dem Raspberry Pi) ist **vorbereitet** — Härtung von Dockerfile und
+Compose, der R7-Fix (ADR 0008) und das Betriebshandbuch `ops/BETRIEB.md` stehen und sind lokal
+geprüft, soweit ohne Docker-Daemon und ohne Pi möglich; die **Durchführung auf dem Pi selbst steht
+noch aus** (§9, M6) — anders als bei den übrigen Meilensteinen ist bei M6 dieser Durchlauf der
+Meilenstein, nicht nur eine Verifikation.
 
 ---
 
@@ -44,7 +48,7 @@ sie schwer umkehrbar sind.
 
 | # | Annahme | Auswirkung, falls falsch |
 | --- | --- | --- |
-| A1 | **Weiterhin offen.** „Hängt!“ belegt **nicht** Port `8181`. Der Port ist über `.env` frei setzbar; M6 enthält einen Prüfschritt auf dem Pi vor dem ersten Start. | Nur eine Zahl in `.env`, aber **vor** dem Etikettendruck zu klären — die Portnummer steht in jedem QR-Code. M5 hat `BASE_URL` samt Port `8181` festgelegt und gedruckt wird damit; der `ss -ltnp`-Nachweis auf dem Pi steht aber weiterhin aus und muss **vor** dem ersten Ausdruck erfolgen (siehe `ops/ETIKETTEN.md`). |
+| A1 | **Weiterhin offen, jetzt mit fertigem Prüfschritt.** „Hängt!“ belegt **nicht** Port `8181`. Der Port ist über `.env` frei setzbar (`HOMEKANBAN_PORT`, mit `docker compose config` als aufgelöster Wert nachweisbar, siehe M6-Härtung); `ops/BETRIEB.md` Phase 1 führt den `ss -ltnp`-Nachweis auf dem Pi durch. Schließbar mit einer Zeile nach dem Durchlauf: „bestätigt, Port `<X>` frei/nicht frei, `HOMEKANBAN_BASE_URL` = `<Y>`“. | Nur eine Zahl in `.env`, aber **vor** dem Etikettendruck zu klären — die Portnummer steht in jedem QR-Code. M5 hat `BASE_URL` samt Port `8181` festgelegt und gedruckt wird damit; der `ss -ltnp`-Nachweis auf dem Pi steht aber weiterhin aus und muss **vor** dem ersten Ausdruck erfolgen (siehe `ops/BETRIEB.md` Phase 1, `ops/ETIKETTEN.md`). |
 | ~~A2~~ | **Erledigt** (bestätigt in der Antwort zu O2): Auf dem Pi läuft **kein** Reverse Proxy, der Zugriff erfolgt direkt über `http://<hostname>.local:<port>`. In M5 als `http://homekanban.local:8181` in `BASE_URL` festgeschrieben. | — |
 | A3 | Das Pi-Betriebssystem ist 64-bit (`aarch64`). | Bei 32-bit armv7 muss das Basis-Image gewechselt werden; da alle Abhängigkeiten reines Python sind, entstehen keine Build-Probleme. |
 | A4 | Bis zu fünf Personen, grob 30–80 Artikel, wenige Buchungen pro Tag. | Die Größenordnung rechtfertigt SQLite und serverseitiges Rendern; bei tausenden Artikeln wäre die Board-Ansicht zu paginieren. |
@@ -138,12 +142,19 @@ tests/
   domain/  services/  web/  api/  conftest.py
 ops/
   Dockerfile  compose.yaml  ETIKETTEN.md  backup.py  restore.py  BACKUP.md   (M9)
+  BETRIEB.md  preflight.sh                                                   (M6)
 docs/
   PROJEKT-PROMPT.md  PLAN.md  KURZBEFEHL.md  adr/
 ```
 
-`ops/BETRIEB.md` (M6) ist hier bewusst **nicht** aufgeführt — es existiert noch nicht (M6 steht
-aus). `ops/BACKUP.md` deckt Sicherung und Restore vorerst allein ab (Fragerunde M9, Frage 2).
+`ops/BETRIEB.md` (M6) ist das Betriebshandbuch: Start, Stopp, Update, Log lesen, und der
+phasenweise Durchlauf vom unberührten Pi bis zur abgenommenen Installation, inklusive der
+Nachholpunkte aus M4/M5/M7/M9. `ops/preflight.sh` ist ein optionaler, deutsch berichtender
+Vorbedingungs-Check (Docker, Port, `.env`, mDNS) für die Phasen 0–3 daraus. `ops/BACKUP.md` deckt
+Sicherung und Restore weiterhin im Detail ab (Fragerunde M9, Frage 2) — `BETRIEB.md` verweist
+dorthin, statt den Inhalt zu duplizieren. Der bis M6 offene Verbindungs-Defekt zu R7 (§10) ist mit
+ADR 0008 behoben: `app/deps.py` ersetzt die bis dahin geteilte `app.state.db` durch eine
+FastAPI-Dependency mit einer Verbindung je Anfrage.
 
 ---
 
@@ -692,22 +703,76 @@ sind vom geklebten Etikett aus 20 cm Entfernung scanbar; nur nicht archivierte A
 
 ### M6 — Deployment auf dem Raspberry Pi
 
+**Status:** **vorbereitet — Durchführung auf dem Pi steht aus.** Anders als bei M0–M5 und M7–M9 ist
+bei M6 nicht der Code das Ergebnis, sondern der Durchlauf selbst — der Code (Härtung, R7-Fix,
+Runbook) ist fertig und lokal geprüft, soweit ohne Docker-Daemon und ohne echten Pi möglich, aber
+noch nicht das, was `docs/PLAN.md` als Definition of Done verlangt. Auf „erledigt“ gesetzt wird M6
+erst, wenn die Abnahme-Checkliste in [`ops/BETRIEB.md`](../ops/BETRIEB.md) abgehakt ist.
+
 **Ziel:** Läuft dauerhaft neben „Hängt!“, startet nach Stromausfall selbst.
-**Drin:** Härtung von Dockerfile und Compose (Nicht-Root, `restart: unless-stopped`,
-`HEALTHCHECK`, Speicherlimit), Volume, Portprüfung auf dem Pi (`ss -ltnp`), Zugriff über
-`.local`-Hostname, `ops/BETRIEB.md` (Start, Stopp, Update, Log lesen, Datenbank sichern, was tun
-wenn nichts geht).
+**Drin:** Härtung von Dockerfile und Compose (Nicht-Root mit fester UID/GID, `restart:
+unless-stopped`, `HEALTHCHECK` ohne Zusatzpaket, Speicher- und Logging-Limit, konfigurierbarer
+Host-Port über `HOMEKANBAN_PORT`), der R7-Fix (Verbindung je Anfrage, ADR 0008), Portprüfung auf
+dem Pi (`ss -ltnp`), Zugriff über `.local`-Hostname (Avahi-Alias), `ops/BETRIEB.md` (Start, Stopp,
+Update, Log lesen, Datenbank sichern, was tun wenn nichts geht, plus der komplette
+Einrichtungsdurchlauf samt Nachholpunkten aus M4/M5/M7/M9), `ops/preflight.sh` (optionaler
+Vorbedingungs-Check).
 **Draußen:** Reverse Proxy, HTTPS, Zugriff von außen.
 **Abhängigkeiten:** M0 (Container existiert schon), sinnvoll nach M4.
 **Definition of Done:** Nach `reboot` des Pi ist die App ohne Handgriff erreichbar; „Hängt!“ läuft
-unbeeinträchtigt weiter; ein zweites Haushaltsmitglied hat die App auf dem eigenen Handy geöffnet.
-**Testfokus:** manuell nach Checkliste in `BETRIEB.md`; zwei Geräte buchen gleichzeitig ohne
-`database is locked`.
-**Artefakte:** Betriebshandbuch, laufende Installation.
+unbeeinträchtigt weiter; zwei Geräte buchen gleichzeitig ohne `database is locked`; ein zweites
+Haushaltsmitglied hat die App auf dem eigenen Handy geöffnet. **Alle vier Punkte sind ausschließlich
+am echten Pi mit echten Geräten nachweisbar** (siehe „Was in dieser Session nicht abnehmbar ist“
+unten) — bis dahin gelten sie als vorbereitet, nicht als bestanden.
+**Testfokus:** manuell nach der Abnahme-Checkliste in `ops/BETRIEB.md`; zwei Geräte buchen
+gleichzeitig ohne `database is locked` — lokal vorab abgesichert durch
+`tests/web/test_scan.py::TestConcurrentDoubleTap`, 30 von 30 Läufen grün nach dem R7-Fix (siehe
+ADR 0008).
+**Artefakte:** `ops/BETRIEB.md`, `ops/preflight.sh`, ADR 0008, gehärtetes `ops/Dockerfile` und
+`ops/compose.yaml` — die laufende Installation selbst entsteht erst beim Durchlauf auf dem Pi.
 
-> **Empfehlung zur Reihenfolge:** M6 ist bewusst klein gehalten, weil der Container ab M0 mitläuft.
-> Sinnvoll ist ein früher Probelauf auf dem Pi bereits nach M3 — dann scannt der Haushalt echte
-> Etiketten, während M4 entsteht, und die Bestandsdaten sind von Anfang an echt.
+**Was in dieser Session geprüft werden konnte:** `make check` (Lint, `mypy` auf `app/domain`,
+gesamte Testsuite inklusive der 40 mechanisch umgestellten Aufrufstellen); `docker compose config`
+löst `ops/compose.yaml` fehlerfrei auf und zeigt die tatsächlich aufgelösten Werte (Port,
+Speicherlimit, Logging-Optionen), sowohl mit als auch ohne `--env-file` — das bestätigt die
+dokumentierte Interpolationsfalle, ohne einen laufenden Docker-Daemon zu brauchen.
+
+**Was ausschließlich der Pi-Durchlauf zeigen kann, hier also *nicht* geprüft:** ob die App nach
+einem `reboot` von selbst hochkommt; ob „Hängt!“ neben dem gehärteten Container unbeeinträchtigt
+bleibt; ob zwei *echte* Geräte gleichzeitig ohne Fehler buchen (die 30/30 lokalen Testläufe sind
+ein starkes Indiz, kein Ersatz für den echten Zwei-Geräte-Test); ob die Etiketten maßhaltig drucken
+und aus 20 cm scannbar sind; ob der Kurzbefehl eine abhakbare Notiz erzeugt; ob der Restore mit
+laufendem Container durchläuft; ob der Backup-Cron auf echter Pi-Hardware tatsächlich feuert.
+
+**In M6 entschieden** (Fragerunde mit dem Nutzer, CLAUDE.md §1):
+
+- **Frage 1 — R7-Verbindungsfix:** Verbindung je Anfrage, **in diesem Durchgang** — wie empfohlen.
+  `app/deps.py::get_db` ersetzt die bis dahin geteilte `app.state.db` (ADR 0005) an allen 40
+  Aufrufstellen in 11 Dateien; der `threading.Lock` um `db.transaction()` entfällt ersatzlos.
+  Details, Alternativen und Konsequenzen: ADR 0008. `TestConcurrentDoubleTap` lief danach 30-mal
+  hintereinander grün (vorher: reproduzierbar sporadisch fehlschlagend, siehe „Offener Defekt zu
+  R7“ unter §10, jetzt als behoben markiert).
+- **Frage 2 — Backup-Anbindung auf dem Pi:** **Alles im Container** — gegen die ursprüngliche
+  Empfehlung „Bind-Mount + Host-Cron“. `ops/Dockerfile` kopiert seit M6 `ops/backup.py` und
+  `ops/restore.py` mit ins Image; der Host-Cron ruft `docker compose exec` auf. Das behebt
+  zugleich den in M9 entstandenen Defekt, dass Weg (a) aus `ops/BACKUP.md` mangels `ops/` im Image
+  gar nicht funktionieren konnte. Konsequenz: Das Sicherungsverzeichnis liegt weiterhin innerhalb
+  des benannten Volumes — sicher gegen eine beschädigte Datenbankdatei, nicht gegen den Verlust der
+  ganzen SD-Karte (siehe Frage 3, R5).
+- **Frage 3 — Backup-Ziel außerhalb des Pi:** **Weiterhin offen**, gegen die Empfehlung
+  „USB-Platte, falls vorhanden“ — zum Zeitpunkt dieses Durchgangs stand kein Gerät im Haushalt
+  fest. `ops/BACKUP.md` beschreibt einen manuellen Kopierschritt (`docker compose cp`) als
+  Übergangslösung. R5 bleibt damit zum Teil ungelöst, wie schon nach M9 — siehe dort.
+- **Frage 4 — Updates:** Auf dem Pi bauen (`git pull` + `docker compose up -d --build`) — wie
+  empfohlen. `ops/BETRIEB.md` benennt dazu einen Prüfschritt für die Build-Dauer und den
+  dokumentierten, nicht automatischen Rückweg auf schlankes `uvicorn` (ohne `[standard]`), falls
+  auf dem Pi kompiliert statt ein fertiges `aarch64`-Wheel geladen wird (A3).
+
+> **Empfehlung zur Reihenfolge (aus M0, weiterhin gültig):** M6 ist bewusst klein gehalten, weil
+> der Container ab M0 mitläuft. Sinnvoll ist ein früher Probelauf auf dem Pi bereits nach M3 — dann
+> scannt der Haushalt echte Etiketten, während M4 entsteht, und die Bestandsdaten sind von Anfang
+> an echt. Dieser M6-Durchgang selbst folgt jetzt auf M9, weil er die Nachholpunkte aller
+> vorherigen Meilensteine in einem Durchlauf einsammelt.
 
 ### M7 — Kategorien und Ladenzuordnung
 
@@ -886,39 +951,39 @@ schwer umkehrbares Format.
 | R2 | **Doppeltes Abhaken:** In der Notiz wird im Laden abgehakt, gebucht wird aber in der App. | Doppelte Arbeit, und genau daran stirbt die Disziplin. | Auf `/liste` ein „Alles gekauft“-Button, der alle offenen Positionen in einem Zug bucht — dann kostet der Heimweg einen Tap. Die Notiz ist die Ansicht im Laden, die App die Buchung. **Offene Frage O1.** |
 | R3 | **Bestandsdrift** durch nicht gescannte Entnahmen. | Die Liste wird unglaubwürdig, danach nutzt sie keiner mehr. | „Bestand korrigieren“ ist auf jeder Entnahmeseite erreichbar, nicht in einem Untermenü; M8 markiert unplausibel niedrigen Verbrauch; Etiketten kleben am Entnahmeort, nicht am Vorratsschrank. Vollständig lösen lässt sich das nicht — die Gegenmaßnahme ist, dass Korrigieren so billig ist wie Buchen. |
 | R4 | **Kollision mit „Hängt!“** über Port, Hostname oder Speicher. | Im schlimmsten Fall steht die bestehende App. | Eigener Container, eigenes Volume, Port aus `.env` mit Prüfschritt in M6, Speicherlimit im Compose. Vor dem ersten Start zu klären (A1). |
-| R5 | **SD-Karten-Ausfall.** | Totalverlust von Historie und Stammdaten. | **Umgesetzt in M9**, nicht mehr nur geplant: WAL, `synchronous=NORMAL`, keine Logs auf die Karte weiterhin aus M0; `ops/backup.py` (Sicherung), `ops/restore.py` (Rückweg, tatsächlich durchgeführt, siehe §9 M9), Aufbewahrungsregel (`app/domain/retention.py`). **Restrisiko:** Ein Backup-Ziel *außerhalb* des Pi ist bewusst noch nicht automatisiert (Fragerunde M9, Frage 4) — solange nur von Hand kopiert wird, schützt M9 vor einer kaputten Datenbankdatei, aber noch nicht zuverlässig vor dem Verlust der ganzen Karte. Empfehlung weiterhin: Systemlaufwerk auf USB-SSD. |
-| R6 | **`BASE_URL` ändert sich** nach dem Etikettendruck. | Alle geklebten QR-Codes zeigen ins Nichts. | **Entschieden in M5:** `http://homekanban.local:8181` — eigener mDNS-Name statt IP und statt `raspberrypi.local` (§8). Als „nicht ohne Neudruck ändern“ in [`ops/ETIKETTEN.md`](../ops/ETIKETTEN.md) vermerkt, gehört in M6 auch nach `BETRIEB.md`. **Restrisiko:** Der Port `8181` steckt mit in jedem Code und ist bis M6 unbestätigt (A1) — der `ss -ltnp`-Nachweis muss vor dem ersten Ausdruck erfolgen. Erwägenswert bleibt eine Weiterleitung, die alte Basis-URLs toleriert. |
-| R7 | **Gleichzeitige Schreibzugriffe** auf SQLite. | `database is locked` mitten im Scan. | WAL, `busy_timeout=5000`, kurze Transaktionen, keine Transaktion über einen Render-Vorgang hinweg. In M6 mit zwei Geräten geprüft. **Offener Defekt, siehe unten.** |
+| R5 | **SD-Karten-Ausfall.** | Totalverlust von Historie und Stammdaten. | **Umgesetzt in M9**, nicht mehr nur geplant: WAL, `synchronous=NORMAL`, keine Logs auf die Karte weiterhin aus M0 (seit M6 zusätzlich mit Größenlimit für die Container-Logs selbst, `ops/compose.yaml`); `ops/backup.py` (Sicherung), `ops/restore.py` (Rückweg, tatsächlich durchgeführt, siehe §9 M9), Aufbewahrungsregel (`app/domain/retention.py`). **Restrisiko unverändert:** Ein Backup-Ziel *außerhalb* des Pi ist weiterhin nicht automatisiert (Fragerunde M9, Frage 4, in der M6-Fragerunde erneut gefragt, Frage 3 — Antwort weiterhin „kein Gerät steht fest“) — solange nur von Hand kopiert wird, schützt die Sicherung vor einer kaputten Datenbankdatei, aber noch nicht zuverlässig vor dem Verlust der ganzen Karte. Empfehlung weiterhin: Systemlaufwerk auf USB-SSD. |
+| R6 | **`BASE_URL` ändert sich** nach dem Etikettendruck. | Alle geklebten QR-Codes zeigen ins Nichts. | **Entschieden in M5:** `http://homekanban.local:8181` — eigener mDNS-Name statt IP und statt `raspberrypi.local` (§8). Als „nicht ohne Neudruck ändern“ in [`ops/ETIKETTEN.md`](../ops/ETIKETTEN.md) vermerkt, seit M6 auch in [`ops/BETRIEB.md`](../ops/BETRIEB.md) Phase 1/7. **Restrisiko:** Der Port `8181` steckt mit in jedem Code und ist bis zum Pi-Durchlauf unbestätigt (A1) — `ops/BETRIEB.md` Phase 1 verlangt den `ss -ltnp`-Nachweis ausdrücklich vor dem ersten Ausdruck (Phase 7). Erwägenswert bleibt eine Weiterleitung, die alte Basis-URLs toleriert. |
+| R7 | **Gleichzeitige Schreibzugriffe** auf SQLite. | `database is locked` mitten im Scan. | WAL, `busy_timeout=5000`, kurze Transaktionen, keine Transaktion über einen Render-Vorgang hinweg. **In M6 behoben** (ADR 0008: Verbindung je Anfrage statt geteilter `app.state.db`) und lokal mit zwei simulierten Geräten geprüft (`TestConcurrentDoubleTap`, 30 von 30 Läufen grün); der Nachweis mit zwei *echten* Geräten steht noch aus, siehe `ops/BETRIEB.md` Phase 10. |
 | R8 | **Die App wird nach drei Wochen nicht mehr benutzt.** Das ist das eigentliche Projektrisiko. | Aufwand ohne Nutzen. | Zwei-Tap-Anspruch als Abnahmekriterium in M3, kein Login, früher Echtbetrieb ab M3 statt großer Fertigstellung, wenige Artikel zu Beginn (10–15 statt „alles“). |
 | R9 | **Etikettenpflege:** neue Artikel, abgefallene Aufkleber. | Löcher im System, gerade bei selten gekauften Dingen. | Nachdruck einzelner Etiketten aus der Detailansicht (seit M5: QR als SVG und PNG direkt am Artikel), `qr_token` bleibt bei Umbenennung stabil, Reservebogen im Vorratsschrank. Der Artikelname steht als Klartext auf jedem Etikett, damit sich ein abgefallener Aufkleber zuordnen lässt. **Bewusst nicht gelöst:** Ein Nachdruck beginnt immer bei Zelle 1 und verbraucht einen frischen Bogen — eine wählbare Startposition für angebrochene Bögen wurde in M5 verworfen (§9). |
 
-### Offener Defekt zu R7: eine Verbindung für alle Anfragen
+### Defekt zu R7 behoben: eine Verbindung je Anfrage statt für alle Anfragen
 
-**Gefunden in M4, entstanden in M0/M3, noch nicht behoben — die Entscheidung gehört dir.**
+**Gefunden in M4, entstanden in M0/M3, behoben in M6 — Details und Alternativen in ADR 0008.**
 
-Die App hält **eine einzige** `sqlite3.Connection` in `app.state.db` und benutzt sie aus dem
-Threadpool von FastAPI, also aus mehreren Threads gleichzeitig. ADR 0005 sichert davon nur die
+Die App hielt bis M6 **eine einzige** `sqlite3.Connection` in `app.state.db` und benutzte sie aus
+dem Threadpool von FastAPI, also aus mehreren Threads gleichzeitig. ADR 0005 sicherte davon nur die
 *Transaktionen* ab (prozessweiter `threading.Lock` in `db.transaction()`). Lesende Zugriffe
-**außerhalb** einer Transaktion sind ungeschützt — zum Beispiel der Vorab-`SELECT` auf den
-Idempotenzschlüssel in `services/stock.py::withdraw`, oder jeder Lesezugriff beim Rendern.
-Trifft so ein Lesezugriff auf dasselbe Verbindungsobjekt, während ein anderer Thread mitten in
-einer Transaktion steckt, kann `sqlite3.InterfaceError: bad parameter or other API misuse`
-auftreten — im Alltag also eine 500er-Seite mitten im Scan, genau bei dem Fall, den R7 meint:
-zwei Haushaltsmitglieder buchen gleichzeitig.
+**außerhalb** einer Transaktion waren ungeschützt — zum Beispiel der Vorab-`SELECT` auf den
+Idempotenzschlüssel in `services/stock.py::withdraw`, oder jeder Lesezugriff beim Rendern. Traf so
+ein Lesezugriff auf dasselbe Verbindungsobjekt, während ein anderer Thread mitten in einer
+Transaktion steckte, konnte `sqlite3.InterfaceError: bad parameter or other API misuse` auftreten —
+im Alltag also eine 500er-Seite mitten im Scan, genau bei dem Fall, den R7 meint: zwei
+Haushaltsmitglieder buchen gleichzeitig.
 
-**Nachweis:** `tests/web/test_scan.py::TestConcurrentDoubleTap` (zwei gleichzeitige POSTs über
-denselben `TestClient`) schlägt sporadisch fehl — reproduziert auf unverändertem `main`, etwa
-einmal in zwölf Läufen, also unabhängig von M4. M4 fügt kein neues Muster hinzu, erbt die
-Anfälligkeit aber überall dort, wo vor einem Schreibzugriff gelesen wird.
+**Nachweis vor der Behebung:** `tests/web/test_scan.py::TestConcurrentDoubleTap` (zwei
+gleichzeitige POSTs über denselben `TestClient`) schlug sporadisch fehl — reproduziert auf
+unverändertem `main`, etwa einmal in zwölf Läufen, also unabhängig von M4.
 
-**Warum hier nicht behoben:** Die tragfähige Lösung ist eine Verbindung **je Thread** oder
-**je Anfrage** statt einer geteilten (SQLite regelt Gleichzeitigkeit zwischen getrennten
-Verbindungen über WAL, `busy_timeout` und `BEGIN IMMEDIATE` — genau der Weg, den ADR 0005 für
-den mehrprozessigen Fall bereits beschreibt und den die Nebenläufigkeitstests mit echten
-Verbindungen zuverlässig bestehen). Das ist ein Eingriff in `db.py`, `main.py` und die
-Verbindungsführung aller Router — eine Architekturentscheidung mit Abwägungen, keine Reparatur
-im Umfang von M4 (CLAUDE.md §4, kein Feature-Creep). Sie gehört nach M6, wo R7 ohnehin mit zwei
-Geräten geprüft wird, oder in einen eigenen `fix/`-Durchgang davor.
+**Behoben in M6** (Fragerunde, Frage 1, wie empfohlen): Eine Verbindung **je Anfrage** statt einer
+geteilten. `app/deps.py::get_db` ist eine FastAPI-Dependency, die für jede Anfrage über
+`app/db.py::connect()` eine eigene Verbindung öffnet und am Ende der Anfrage schließt; alle 40
+bisherigen Zugriffsstellen auf `request.app.state.db` in 11 Dateien sind umgestellt. SQLite regelt
+Gleichzeitigkeit zwischen getrennten Verbindungen über WAL, `busy_timeout` und `BEGIN IMMEDIATE`
+(unverändert in `db.transaction()`) — der Weg, den ADR 0005 für den mehrprozessigen Fall bereits
+beschrieb und den die Nebenläufigkeitstests mit echten Verbindungen zuverlässig bestehen. Der
+`threading.Lock` aus ADR 0005 entfällt ersatzlos. **Nachweis danach:** `TestConcurrentDoubleTap`
+lief 30-mal hintereinander grün. Details, Alternativen und Konsequenzen: ADR 0008.
 
 ### Offene Fragen an dich
 

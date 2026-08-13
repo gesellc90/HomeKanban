@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 from fastapi.testclient import TestClient
 
+from app.db import connect
 from app.repo import items as items_repo
 from app.services import stock as stock_service
 
@@ -43,11 +44,14 @@ def _days_ago(days: int) -> str:
 
 def _book_rich_history(client: TestClient, item_id: int, *, quantity: int = 1) -> None:
     """4 Entnahmen über 45 Tage — genug für eine Prognose (§9: >=3 Entnahmen, >=14 Tage)."""
-    connection = client.app.state.db  # type: ignore[attr-defined]
-    for days in (45, 30, 15, 0):
-        stock_service.withdraw(
-            connection, item_id=item_id, quantity=quantity, source="qr", now=_days_ago(days)
-        )
+    connection = connect(client.app.state.settings.db_path)  # type: ignore[attr-defined]
+    try:
+        for days in (45, 30, 15, 0):
+            stock_service.withdraw(
+                connection, item_id=item_id, quantity=quantity, source="qr", now=_days_ago(days)
+            )
+    finally:
+        connection.close()
 
 
 class TestHouseholdOverview:
@@ -138,8 +142,11 @@ class TestTakeOverSuggestion:
 
         assert response.status_code == 303
         assert response.headers["location"] == f"/artikel/{item_id}/verlauf"
-        connection = client.app.state.db  # type: ignore[attr-defined]
-        item = items_repo.get_by_id(connection, item_id)
+        connection = connect(client.app.state.settings.db_path)  # type: ignore[attr-defined]
+        try:
+            item = items_repo.get_by_id(connection, item_id)
+        finally:
+            connection.close()
         assert item is not None
         assert item.reorder_level > 0
 
@@ -158,18 +165,23 @@ class TestTakeOverSuggestion:
         item_id = _create_item(
             client, name="Kaffee", stock=50, reorder_level=1, target_stock=3, lead_days=7
         )
-        connection = client.app.state.db  # type: ignore[attr-defined]
-        for days, quantity in ((14, 10), (9, 10), (4, 10), (0, 10)):
-            stock_service.withdraw(
-                connection, item_id=item_id, quantity=quantity, source="qr", now=_days_ago(days)
+        connection = connect(client.app.state.settings.db_path)  # type: ignore[attr-defined]
+        try:
+            for days, quantity in ((14, 10), (9, 10), (4, 10), (0, 10)):
+                stock_service.withdraw(
+                    connection, item_id=item_id, quantity=quantity, source="qr", now=_days_ago(days)
+                )
+
+            response = client.post(
+                f"/artikel/{item_id}/verlauf/uebernehmen", follow_redirects=False
             )
 
-        response = client.post(f"/artikel/{item_id}/verlauf/uebernehmen", follow_redirects=False)
-
-        assert response.status_code == 422
-        item = items_repo.get_by_id(connection, item_id)
-        assert item is not None
-        assert item.reorder_level == 1  # unverändert — nichts wurde geschrieben
+            assert response.status_code == 422
+            item = items_repo.get_by_id(connection, item_id)
+            assert item is not None
+            assert item.reorder_level == 1  # unverändert — nichts wurde geschrieben
+        finally:
+            connection.close()
 
     def test_archived_item_returns_409(self, client: TestClient) -> None:
         item_id = _create_item(client, name="Kaffee", stock=10)

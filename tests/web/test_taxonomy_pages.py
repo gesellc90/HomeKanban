@@ -3,6 +3,8 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
+from app.db import connect
+
 
 @pytest.mark.parametrize("path", ["/kategorien", "/laeden"])
 class TestListPage:
@@ -152,32 +154,41 @@ class TestDelete:
 def _create_item_assigned_to(client: TestClient, path: str, entry_id: int) -> int:
     from app.services import stock
 
-    connection = client.app.state.db  # type: ignore[attr-defined]
-    kwargs = {"category_id": entry_id} if path == "/kategorien" else {"store_id": entry_id}
-    return stock.create_item(
-        connection,
-        name="Kaffee",
-        unit="Packung",
-        stock=1,
-        reorder_level=1,
-        target_stock=5,
-        position=0,
-        **kwargs,
-    )
+    connection = connect(client.app.state.settings.db_path)  # type: ignore[attr-defined]
+    try:
+        kwargs = {"category_id": entry_id} if path == "/kategorien" else {"store_id": entry_id}
+        return stock.create_item(
+            connection,
+            name="Kaffee",
+            unit="Packung",
+            stock=1,
+            reorder_level=1,
+            target_stock=5,
+            position=0,
+            **kwargs,
+        )
+    finally:
+        connection.close()
 
 
 def _ordered_names(client: TestClient, path: str) -> list[str]:
     from app.repo import taxonomy as taxonomy_repo
 
     table: taxonomy_repo.TableName = "categories" if path == "/kategorien" else "stores"
-    connection = client.app.state.db  # type: ignore[attr-defined]
-    return [entry.name for entry in taxonomy_repo.list_all(connection, table)]
+    connection = connect(client.app.state.settings.db_path)  # type: ignore[attr-defined]
+    try:
+        return [entry.name for entry in taxonomy_repo.list_all(connection, table)]
+    finally:
+        connection.close()
 
 
 def _entry_id_by_name(client: TestClient, path: str, name: str) -> int:
     from app.repo import taxonomy as taxonomy_repo
 
     table: taxonomy_repo.TableName = "categories" if path == "/kategorien" else "stores"
-    connection = client.app.state.db  # type: ignore[attr-defined]
-    entries = taxonomy_repo.list_all(connection, table)
-    return next(entry.id for entry in entries if entry.name == name)
+    connection = connect(client.app.state.settings.db_path)  # type: ignore[attr-defined]
+    try:
+        entries = taxonomy_repo.list_all(connection, table)
+        return next(entry.id for entry in entries if entry.name == name)
+    finally:
+        connection.close()
