@@ -5,6 +5,7 @@ Der Testfokus aus §9: Textformat zeichengenau, zweiter Export ohne zweite Liste
 
 from __future__ import annotations
 
+import sqlite3
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -12,9 +13,14 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.config import Settings
+from app.db import connect
 from app.main import create_app
 
 API_KEY = "geheim-fuer-den-kurzbefehl"
+
+
+def _connection(client: TestClient) -> sqlite3.Connection:
+    return connect(client.app.state.settings.db_path)  # type: ignore[attr-defined]
 
 
 @pytest.fixture
@@ -64,9 +70,11 @@ def _create_item(
 
 def _create_store(client: TestClient, name: str) -> int:
     client.post("/laeden", data={"name": name})
-    row = client.app.state.db.execute(  # type: ignore[attr-defined]
-        "SELECT id FROM stores WHERE name = ?", (name,)
-    ).fetchone()
+    connection = _connection(client)
+    try:
+        row = connection.execute("SELECT id FROM stores WHERE name = ?", (name,)).fetchone()
+    finally:
+        connection.close()
     assert row is not None
     return int(row["id"])
 
@@ -74,7 +82,11 @@ def _create_store(client: TestClient, name: str) -> int:
 def _assign_store(client: TestClient, item_id: int, store_id: int) -> None:
     from app.repo import items as items_repo
 
-    item = items_repo.get_by_id(client.app.state.db, item_id)  # type: ignore[attr-defined]
+    connection = _connection(client)
+    try:
+        item = items_repo.get_by_id(connection, item_id)
+    finally:
+        connection.close()
     assert item is not None
     response = client.post(
         f"/artikel/{item_id}",
@@ -92,9 +104,13 @@ def _assign_store(client: TestClient, item_id: int, store_id: int) -> None:
 
 
 def _list_row(client: TestClient) -> tuple[str | None, int]:
-    row = client.app.state.db.execute(  # type: ignore[attr-defined]
-        "SELECT exported_at, export_count FROM shopping_lists WHERE status = 'open'"
-    ).fetchone()
+    connection = _connection(client)
+    try:
+        row = connection.execute(
+            "SELECT exported_at, export_count FROM shopping_lists WHERE status = 'open'"
+        ).fetchone()
+    finally:
+        connection.close()
     assert row is not None
     return row["exported_at"], int(row["export_count"])
 
@@ -171,9 +187,11 @@ def test_get_does_not_create_a_list(api_client: TestClient) -> None:
 
     assert response.status_code == 200
     assert response.text == ""
-    count = api_client.app.state.db.execute(  # type: ignore[attr-defined]
-        "SELECT COUNT(*) AS n FROM shopping_lists"
-    ).fetchone()["n"]
+    connection = _connection(api_client)
+    try:
+        count = connection.execute("SELECT COUNT(*) AS n FROM shopping_lists").fetchone()["n"]
+    finally:
+        connection.close()
     assert count == 0
 
 
@@ -197,9 +215,11 @@ def test_second_export_reconciles_instead_of_creating_a_second_list(
     response = api_client.post("/api/shopping-list/export", headers={"X-API-Key": API_KEY})
 
     assert response.text == "Klopapier — 10 Rollen\nKaffee — 2 Packungen"
-    count = api_client.app.state.db.execute(  # type: ignore[attr-defined]
-        "SELECT COUNT(*) AS n FROM shopping_lists"
-    ).fetchone()["n"]
+    connection = _connection(api_client)
+    try:
+        count = connection.execute("SELECT COUNT(*) AS n FROM shopping_lists").fetchone()["n"]
+    finally:
+        connection.close()
     assert count == 1
     assert _list_row(api_client)[1] == 2
 
@@ -244,9 +264,11 @@ def test_empty_list_exports_empty_text(api_client: TestClient) -> None:
 def test_checked_lines_do_not_appear_in_the_export(api_client: TestClient) -> None:
     _create_item(api_client, name="Klopapier", unit="Rolle")
     api_client.post("/liste/erzeugen", follow_redirects=False)
-    row = api_client.app.state.db.execute(  # type: ignore[attr-defined]
-        "SELECT id, list_id FROM shopping_list_lines"
-    ).fetchone()
+    connection = _connection(api_client)
+    try:
+        row = connection.execute("SELECT id, list_id FROM shopping_list_lines").fetchone()
+    finally:
+        connection.close()
     api_client.post(
         f"/liste/{row['list_id']}/zeilen/{row['id']}/abhaken", data={}, follow_redirects=False
     )

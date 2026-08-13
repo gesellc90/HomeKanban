@@ -23,6 +23,7 @@ from typing import Any
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
+from app.deps import DbConnection
 from app.repo import taxonomy as taxonomy_repo
 from app.web.templating import templates
 
@@ -210,38 +211,51 @@ def _register(kind: _TaxonomyKind) -> None:
     # keine gemeinsame Schleifenvariable wiederverwendet wird.
 
     @router.get(kind.base_path, response_class=HTMLResponse, name=f"{kind.table}_list")
-    def list_page(request: Request) -> HTMLResponse:
-        return _render_list(request, request.app.state.db, kind)
+    def list_page(request: Request, connection: DbConnection) -> HTMLResponse:
+        return _render_list(request, connection, kind)
 
     @router.post(kind.base_path, response_model=None, name=f"{kind.table}_create")
-    def create(request: Request, name: str = Form("")) -> HTMLResponse | RedirectResponse:
-        return _create(request, request.app.state.db, kind, name)
+    def create(
+        request: Request,
+        connection: DbConnection,
+        name: str = Form(""),
+    ) -> HTMLResponse | RedirectResponse:
+        return _create(request, connection, kind, name)
 
     @router.post(f"{kind.base_path}/{{entry_id}}", response_model=None, name=f"{kind.table}_rename")
     def rename(
-        request: Request, entry_id: int, name: str = Form("")
+        request: Request,
+        entry_id: int,
+        connection: DbConnection,
+        name: str = Form(""),
     ) -> HTMLResponse | RedirectResponse:
-        return _rename(request, request.app.state.db, kind, entry_id, name)
+        return _rename(request, connection, kind, entry_id, name)
 
     @router.post(
         f"{kind.base_path}/{{entry_id}}/hoch", response_model=None, name=f"{kind.table}_up"
     )
-    def move_up(request: Request, entry_id: int) -> HTMLResponse | RedirectResponse:
-        return _move(request, request.app.state.db, kind, entry_id, up=True)
+    def move_up(
+        request: Request, entry_id: int, connection: DbConnection
+    ) -> HTMLResponse | RedirectResponse:
+        return _move(request, connection, kind, entry_id, up=True)
 
     @router.post(
         f"{kind.base_path}/{{entry_id}}/runter", response_model=None, name=f"{kind.table}_down"
     )
-    def move_down(request: Request, entry_id: int) -> HTMLResponse | RedirectResponse:
-        return _move(request, request.app.state.db, kind, entry_id, up=False)
+    def move_down(
+        request: Request, entry_id: int, connection: DbConnection
+    ) -> HTMLResponse | RedirectResponse:
+        return _move(request, connection, kind, entry_id, up=False)
 
     @router.post(
         f"{kind.base_path}/{{entry_id}}/loeschen",
         response_model=None,
         name=f"{kind.table}_delete",
     )
-    def delete(request: Request, entry_id: int) -> HTMLResponse | RedirectResponse:
-        return _delete(request, request.app.state.db, kind, entry_id)
+    def delete(
+        request: Request, entry_id: int, connection: DbConnection
+    ) -> HTMLResponse | RedirectResponse:
+        return _delete(request, connection, kind, entry_id)
 
 
 _register(_CATEGORY)

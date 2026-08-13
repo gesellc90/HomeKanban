@@ -1,6 +1,17 @@
-# Einfaches Compose-Setup für M0 — läuft, ohne vorzugreifen.
-# Härtung (Nicht-Root, restart:, HEALTHCHECK, Speicherlimit, konfigurierbarer Host-Port über
-# HOMEKANBAN_PORT) ist Aufgabe von M6 (docs/PLAN.md §9).
+# Gehärtetes Compose-Setup für M6 (docs/PLAN.md §9): Nicht-Root/HEALTHCHECK stecken im Image
+# (ops/Dockerfile), hier kommen restart:, Speicher- und Logging-Limit sowie der konfigurierbare
+# Host-Port dazu.
+#
+# WICHTIG — Interpolation: Compose löst ${...} in dieser Datei WEDER aus `env_file` (das füttert
+# nur die Umgebung *im Container*) NOCH automatisch aus `../.env`, sondern nur aus einer eigenen
+# .env im Compose-Arbeitsverzeichnis oder aus der Shell. Deshalb IMMER mit --env-file aufrufen
+# (siehe ops/BETRIEB.md Phase 3):
+#
+#   docker compose --env-file ../.env up -d
+#
+# Ohne --env-file startet der Container still auf dem Standardport 8181 — und der Port steckt in
+# jedem gedruckten QR-Code (R6, A1). `docker compose config` zeigt die tatsächlich aufgelösten
+# Werte, siehe ops/BETRIEB.md Phase 1.
 services:
   homekanban:
     build:
@@ -10,9 +21,23 @@ services:
       - path: ../.env
         required: false
     ports:
-      - "8181:8181"
+      - "${HOMEKANBAN_PORT:-8181}:8181"
     volumes:
       - homekanban-data:/data
+    restart: unless-stopped
+    # Sparsam bemessen (Raspberry Pi, CLAUDE.md §4) — für einen einzelnen FastAPI/uvicorn-Prozess
+    # mit SQLite reichlich; wird der Container trotzdem durch den OOM-Killer beendet (sichtbar in
+    # `docker compose ps`/`docker inspect` als "OOMKilled"), hier erhöhen.
+    mem_limit: 256m
+    # Docker schreibt Container-Logs per Default (json-file) unbegrenzt auf die SD-Karte — R5
+    # verlangt ausdrücklich "keine Logs auf die Karte" im Sinne von "keine unbegrenzt wachsenden".
+    # Rotation statt Abschalten: `docker compose logs` bleibt dadurch nutzbar (CLAUDE.md §8,
+    # "Log lesen" gehört zum laufenden Betrieb).
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   homekanban-data:

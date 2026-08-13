@@ -1,6 +1,14 @@
 from __future__ import annotations
 
+import sqlite3
+
 from fastapi.testclient import TestClient
+
+from app.db import connect
+
+
+def _connection(client: TestClient) -> sqlite3.Connection:
+    return connect(client.app.state.settings.db_path)  # type: ignore[attr-defined]
 
 
 def _create_item(
@@ -195,7 +203,11 @@ class TestUpdateItem:
         assert response.status_code == 303
         from app.repo import items as items_repo
 
-        item = items_repo.get_by_id(client.app.state.db, item_id)  # type: ignore[attr-defined]
+        connection = _connection(client)
+        try:
+            item = items_repo.get_by_id(connection, item_id)
+        finally:
+            connection.close()
         assert item is not None
         assert item.lead_days == 14
 
@@ -286,7 +298,11 @@ class TestTaxonomyAssignment:
         assert response.status_code == 303
         from app.repo import items as items_repo
 
-        item = items_repo.get_by_id(client.app.state.db, item_id)  # type: ignore[attr-defined]
+        connection = _connection(client)
+        try:
+            item = items_repo.get_by_id(connection, item_id)
+        finally:
+            connection.close()
         assert item is not None
         assert item.category_id == category_id
         assert item.store_id == store_id
@@ -325,7 +341,11 @@ class TestTaxonomyAssignment:
 
         from app.repo import items as items_repo
 
-        item = items_repo.get_by_id(client.app.state.db, item_id)  # type: ignore[attr-defined]
+        connection = _connection(client)
+        try:
+            item = items_repo.get_by_id(connection, item_id)
+        finally:
+            connection.close()
         assert item is not None
         assert item.category_id is None
 
@@ -375,9 +395,12 @@ class TestTaxonomyAssignment:
 def _taxonomy_id(client: TestClient, table: str, name: str) -> int:
     from app.repo import taxonomy as taxonomy_repo
 
-    connection = client.app.state.db  # type: ignore[attr-defined]
-    entries = taxonomy_repo.list_all(connection, table)  # type: ignore[arg-type]
-    return next(entry.id for entry in entries if entry.name == name)
+    connection = _connection(client)
+    try:
+        entries = taxonomy_repo.list_all(connection, table)  # type: ignore[arg-type]
+        return next(entry.id for entry in entries if entry.name == name)
+    finally:
+        connection.close()
 
 
 class TestApplyInventory:

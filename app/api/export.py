@@ -17,11 +17,13 @@ from __future__ import annotations
 
 import logging
 import secrets
+import sqlite3
 from typing import Any
 
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
 
+from app.deps import DbConnection
 from app.domain.grouping import MISC_LABEL, group_and_sort
 from app.domain.pluralization import plural_unit
 from app.domain.shopping import format_export_group_header, format_export_line, format_export_text
@@ -152,18 +154,18 @@ def _render(
 
 
 def _open_lines(
-    request: Request, list_row: lists_repo.ShoppingListRow | None
+    connection: sqlite3.Connection, list_row: lists_repo.ShoppingListRow | None
 ) -> list[lists_repo.ShoppingListLineRow]:
     """Nur offene Positionen gehören in den Export — Abgehaktes ist gekauft, Verworfenes weg."""
     if list_row is None:
         return []
-    connection = request.app.state.db
     return [line for line in lists_repo.list_lines(connection, list_row.id) if line.is_open]
 
 
 @router.get("/shopping-list", response_model=None)
 def read_shopping_list(
     request: Request,
+    connection: DbConnection,
     response_format: str = Query(FORMAT_TEXT, alias="format"),
     key: str | None = Query(None),
 ) -> Response:
@@ -175,14 +177,14 @@ def read_shopping_list(
     if response_format not in _FORMATS:
         return _invalid_format(response_format)
 
-    connection = request.app.state.db
     list_row = lists_repo.get_open_list(connection)
-    return _render(list_row, _open_lines(request, list_row), response_format)
+    return _render(list_row, _open_lines(connection, list_row), response_format)
 
 
 @router.post("/shopping-list/export", response_model=None)
 def export_shopping_list(
     request: Request,
+    connection: DbConnection,
     response_format: str = Query(FORMAT_TEXT, alias="format"),
     key: str | None = Query(None),
 ) -> Response:
@@ -197,7 +199,6 @@ def export_shopping_list(
     if response_format not in _FORMATS:
         return _invalid_format(response_format)
 
-    connection = request.app.state.db
     list_row, _ = shopping_service.create_or_reconcile_list(connection)
     list_row = shopping_service.mark_exported(connection, list_row.id)
-    return _render(list_row, _open_lines(request, list_row), response_format)
+    return _render(list_row, _open_lines(connection, list_row), response_format)

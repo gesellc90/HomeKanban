@@ -4,34 +4,29 @@ Die PRAGMAs setzen die in docs/PLAN.md L1/M0 festgelegten Betriebsparameter für
 WAL-Journal, Fremdschlüssel an, `synchronous=NORMAL` als Kompromiss zwischen Haltbarkeit und
 SD-Karten-Schreiblast, und ein Busy-Timeout gegen `database is locked` bei gleichzeitigen
 Schreibzugriffen mehrerer Haushaltsmitglieder (R7).
+
+Seit ADR 0008 (M6) hält die App keine geteilte Verbindung mehr in `app.state.db` (ADR 0005) —
+`app.deps.get_db` öffnet über `connect()` eine eigene Verbindung je Anfrage und schließt sie
+danach. Gleichzeitige Schreibzugriffe mehrerer Verbindungen regelt SQLite selbst über WAL,
+`busy_timeout` und `BEGIN IMMEDIATE`; ein zusätzlicher Python-Lock ist dafür nicht mehr nötig.
 """
 
 from __future__ import annotations
 
 import sqlite3
-import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-
-# Serialisiert Transaktionen auf derselben Verbindung (R7, docs/PLAN.md §5/M3): FastAPI führt
-# synchrone Endpoints in einem Threadpool aus, mehrere Haushaltsmitglieder können also gleichzeitig
-# buchen — aber ein einzelnes sqlite3.Connection-Objekt lässt pro Prozess nur eine offene
-# Transaktion zu. Ohne diesen Lock würde ein zweiter Thread, der während der ersten Transaktion
-# startet, mit "OperationalError: cannot start a transaction within a transaction" abbrechen,
-# statt korrekt auf den (kurzen) ersten Schreibzugriff zu warten. Jede Transaktion ist kurz
-# (eine Buchung), daher bleibt die Wartezeit unter dem Lock gering.
-_write_lock = threading.Lock()
 
 
 def connect(db_path: Path | str) -> sqlite3.Connection:
     if str(db_path) != ":memory:":
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
 
-    # check_same_thread=False: FastAPI führt synchrone Endpoints in einem Threadpool aus, während
-    # die Verbindung beim App-Start in einem anderen (Lifespan-)Thread erzeugt wird. sqlite3 ist im
-    # Standard-Build serialisiert threadsicher; kurze Transaktionen und busy_timeout federn
-    # gleichzeitige Zugriffe mehrerer Haushaltsmitglieder ab (docs/PLAN.md R7).
+    # check_same_thread=False: FastAPIs Dependency-Generatoren (app/deps.py::get_db) laufen über
+    # anyios Threadpool, der Erzeugen, Nutzen und Schließen derselben Verbindung nicht an einen
+    # einzelnen OS-Thread bindet — auch nicht bei einer Verbindung je Anfrage (ADR 0008). sqlite3
+    # ist im Standard-Build serialisiert threadsicher.
     connection = sqlite3.connect(db_path, isolation_level=None, check_same_thread=False)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA journal_mode = WAL")
@@ -54,12 +49,11 @@ def transaction(connection: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
     mit zwei Threads) nicht wie dokumentiert verhalten: statt auf die kurze erste Transaktion zu
     warten, kam sofort ein "database is locked".
     """
-    with _write_lock:
-        connection.execute("BEGIN IMMEDIATE")
-        try:
-            yield connection
-        except BaseException:
-            connection.rollback()
-            raise
-        else:
-            connection.commit()
+    connection.execute("BEGIN IMMEDIATE")
+    try:
+        yield connection
+    except BaseException:
+        connection.rollback()
+        raise
+    else:
+        connection.commit()

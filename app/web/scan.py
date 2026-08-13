@@ -19,6 +19,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
+from app.deps import DbConnection
 from app.domain.quantities import reorder_quantity
 from app.domain.status import ItemStatus, derive_status
 from app.domain.undo import is_within_undo_window
@@ -154,8 +155,7 @@ def _render_result(
 
 
 @router.get("/e/{token}", response_class=HTMLResponse)
-def scan_item(request: Request, token: str) -> HTMLResponse:
-    connection = request.app.state.db
+def scan_item(request: Request, token: str, connection: DbConnection) -> HTMLResponse:
     item = items_repo.get_by_qr_token(connection, token)
     if item is None:
         return _unknown_token_error(request)
@@ -169,10 +169,10 @@ def scan_item(request: Request, token: str) -> HTMLResponse:
 def book_withdrawal(
     request: Request,
     token: str,
+    connection: DbConnection,
     quantity: int = Form(...),
     idempotency_key: str = Form(...),
 ) -> HTMLResponse | RedirectResponse:
-    connection = request.app.state.db
     item = items_repo.get_by_qr_token(connection, token)
     if item is None:
         return _unknown_token_error(request)
@@ -207,8 +207,12 @@ def book_withdrawal(
 
 
 @router.get("/e/{token}/ok/{movement_id}", response_class=HTMLResponse)
-def scan_result(request: Request, token: str, movement_id: int) -> HTMLResponse:
-    connection = request.app.state.db
+def scan_result(
+    request: Request,
+    token: str,
+    movement_id: int,
+    connection: DbConnection,
+) -> HTMLResponse:
     item = items_repo.get_by_qr_token(connection, token)
     if item is None:
         return _unknown_token_error(request)
@@ -226,8 +230,11 @@ def scan_result(request: Request, token: str, movement_id: int) -> HTMLResponse:
 
 
 @router.post("/bewegungen/{movement_id}/rueckgaengig", response_model=None)
-def undo_movement(request: Request, movement_id: int) -> HTMLResponse | RedirectResponse:
-    connection = request.app.state.db
+def undo_movement(
+    request: Request,
+    movement_id: int,
+    connection: DbConnection,
+) -> HTMLResponse | RedirectResponse:
     settings = request.app.state.settings
 
     movement = movements_repo.get_by_id(connection, movement_id)

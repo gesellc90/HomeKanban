@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse, Response
 
+from app.deps import DbConnection
 from app.domain import labels as labels_domain
 from app.repo import items as items_repo
 from app.services import labels as labels_service
@@ -75,8 +76,7 @@ def _active_item_or_error(
 
 
 @router.get("/artikel/{item_id}/qr.svg", response_model=None)
-def item_qr_svg(request: Request, item_id: int) -> Response:
-    connection = request.app.state.db
+def item_qr_svg(request: Request, item_id: int, connection: DbConnection) -> Response:
     item = _active_item_or_error(request, connection, item_id)
     if isinstance(item, HTMLResponse):
         return item
@@ -90,8 +90,7 @@ def item_qr_svg(request: Request, item_id: int) -> Response:
 
 
 @router.get("/artikel/{item_id}/qr.png", response_model=None)
-def item_qr_png(request: Request, item_id: int) -> Response:
-    connection = request.app.state.db
+def item_qr_png(request: Request, item_id: int, connection: DbConnection) -> Response:
     item = _active_item_or_error(request, connection, item_id)
     if isinstance(item, HTMLResponse):
         return item
@@ -203,6 +202,7 @@ def _grid_from_query(
 @router.get("/etiketten", response_class=HTMLResponse)
 def label_selection(
     request: Request,
+    connection: DbConnection,
     item_id: list[int] = _ITEM_IDS_QUERY,
     grid_key: str = Query(default=labels_domain.DEFAULT_GRID_KEY),
     columns: int | None = Query(default=None),
@@ -215,7 +215,6 @@ def label_selection(
     row_gap: float | None = Query(default=None),
 ) -> HTMLResponse:
     """Auswahl der Artikel und des Rasters. Nur nicht archivierte Artikel stehen zur Wahl (§9)."""
-    connection = request.app.state.db
     items = labels_service.selectable_items(connection)
 
     form = _grid_from_query(
@@ -258,6 +257,7 @@ def _labels_error(request: Request, *, status_code: int, title: str, message: st
 @router.get("/etiketten/druck", response_class=HTMLResponse)
 def label_sheet(
     request: Request,
+    connection: DbConnection,
     item_id: list[int] = _ITEM_IDS_QUERY,
     grid_key: str = Query(default=labels_domain.DEFAULT_GRID_KEY),
     columns: int | None = Query(default=None),
@@ -270,8 +270,6 @@ def label_sheet(
     row_gap: float | None = Query(default=None),
 ) -> HTMLResponse:
     """Druckoptimierte Bogenansicht: kein Kopf, keine Navigation, nur Papier."""
-    connection = request.app.state.db
-
     form = _grid_from_query(
         grid_key=grid_key,
         columns=columns,

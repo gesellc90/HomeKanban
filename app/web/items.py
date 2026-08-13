@@ -16,6 +16,7 @@ from typing import Any
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
+from app.deps import DbConnection
 from app.domain.quantities import reorder_quantity
 from app.domain.status import ItemStatus, derive_status
 from app.domain.validation import ItemInput, validate_item
@@ -112,8 +113,7 @@ def _parse_taxonomy_id(
 
 
 @router.get("/artikel/neu", response_class=HTMLResponse)
-def new_item_form(request: Request) -> HTMLResponse:
-    connection = request.app.state.db
+def new_item_form(request: Request, connection: DbConnection) -> HTMLResponse:
     settings = request.app.state.settings
     context: dict[str, Any] = {
         "values": _new_form_defaults(lead_days=settings.lead_days),
@@ -126,6 +126,7 @@ def new_item_form(request: Request) -> HTMLResponse:
 @router.post("/artikel", response_model=None)
 def create_item(
     request: Request,
+    connection: DbConnection,
     name: str = Form(""),
     unit: str = Form(""),
     note: str = Form(""),
@@ -137,8 +138,6 @@ def create_item(
     category_id: str = Form(""),
     store_id: str = Form(""),
 ) -> HTMLResponse | RedirectResponse:
-    connection = request.app.state.db
-
     clean_name = name.strip()
     clean_unit = unit.strip()
     clean_note = note.strip() or None
@@ -261,8 +260,7 @@ def _render_detail(
 
 
 @router.get("/artikel/{item_id}", response_class=HTMLResponse)
-def item_detail(request: Request, item_id: int) -> HTMLResponse:
-    connection = request.app.state.db
+def item_detail(request: Request, item_id: int, connection: DbConnection) -> HTMLResponse:
     return _render_detail(request, connection, item_id)
 
 
@@ -270,6 +268,7 @@ def item_detail(request: Request, item_id: int) -> HTMLResponse:
 def update_item(
     request: Request,
     item_id: int,
+    connection: DbConnection,
     name: str = Form(""),
     unit: str = Form(""),
     note: str = Form(""),
@@ -280,7 +279,6 @@ def update_item(
     category_id: str = Form(""),
     store_id: str = Form(""),
 ) -> HTMLResponse | RedirectResponse:
-    connection = request.app.state.db
     _require_item(connection, item_id)
 
     clean_name = name.strip()
@@ -356,10 +354,10 @@ def update_item(
 def apply_inventory(
     request: Request,
     item_id: int,
+    connection: DbConnection,
     expected_stock: int = Form(...),
     actual_stock: int = Form(...),
 ) -> HTMLResponse | RedirectResponse:
-    connection = request.app.state.db
     _require_item(connection, item_id)
 
     try:
@@ -394,8 +392,7 @@ def apply_inventory(
 
 
 @router.post("/artikel/{item_id}/archivieren")
-def archive_item(request: Request, item_id: int) -> RedirectResponse:
-    connection = request.app.state.db
+def archive_item(request: Request, item_id: int, connection: DbConnection) -> RedirectResponse:
     _require_item(connection, item_id)
 
     items_repo.archive(connection, item_id, stock_service.utc_now_iso())
@@ -404,8 +401,9 @@ def archive_item(request: Request, item_id: int) -> RedirectResponse:
 
 
 @router.post("/artikel/{item_id}/reaktivieren", response_model=None)
-def reactivate_item(request: Request, item_id: int) -> HTMLResponse | RedirectResponse:
-    connection = request.app.state.db
+def reactivate_item(
+    request: Request, item_id: int, connection: DbConnection
+) -> HTMLResponse | RedirectResponse:
     item = _require_item(connection, item_id)
 
     try:

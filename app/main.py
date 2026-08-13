@@ -36,13 +36,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        # Migrationen laufen einmalig beim Start über eine kurzlebige Verbindung. Seit ADR 0008
+        # hält die App danach keine geteilte Verbindung mehr — jede Anfrage öffnet ihre eigene
+        # über app.deps.get_db.
         connection = connect(settings.db_path)
-        migrate(connection, MIGRATIONS_DIR)
-        app.state.db = connection
         try:
-            yield
+            migrate(connection, MIGRATIONS_DIR)
         finally:
             connection.close()
+        yield
 
     app = FastAPI(title="HomeKanban", lifespan=lifespan)
     app.state.settings = settings

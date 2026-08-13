@@ -22,6 +22,7 @@ from typing import Any
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
+from app.deps import DbConnection
 from app.domain.grouping import Group, group_and_sort
 from app.domain.pluralization import format_quantity
 from app.repo import shopping_lists as lists_repo
@@ -218,17 +219,17 @@ def _parse_purchased_qty(raw: str) -> int | None:
 
 
 @router.get(LIST_PATH, response_class=HTMLResponse)
-def shopping_list_page(request: Request) -> HTMLResponse:
+def shopping_list_page(request: Request, connection: DbConnection) -> HTMLResponse:
     """Die offene Liste zum Abhaken. Gibt es keine, ist das kein 404, sondern eine freundliche
     leere Seite mit „Liste erzeugen“ — der Normalfall zwischen zwei Einkäufen."""
-    return _render_page(request, request.app.state.db)
+    return _render_page(request, connection)
 
 
 @router.post("/liste/erzeugen")
-def create_list(request: Request) -> RedirectResponse:
+def create_list(connection: DbConnection) -> RedirectResponse:
     """Legt die offene Liste an, falls nötig, und gleicht sie ab (§6). Ein zweiter Aufruf erzeugt
     keine zweite Liste, sondern aktualisiert die bestehende."""
-    shopping_service.create_or_reconcile_list(request.app.state.db)
+    shopping_service.create_or_reconcile_list(connection)
     return RedirectResponse(LIST_PATH, status_code=303)
 
 
@@ -237,9 +238,9 @@ def check_line(
     request: Request,
     list_id: int,
     line_id: int,
+    connection: DbConnection,
     purchased_qty: str = Form(""),
 ) -> HTMLResponse | RedirectResponse:
-    connection = request.app.state.db
     try:
         quantity = _parse_purchased_qty(purchased_qty)
         result = shopping_service.check_line(
@@ -274,8 +275,12 @@ def check_line(
 
 
 @router.post("/liste/{list_id}/zeilen/{line_id}/zuruecknehmen", response_model=None)
-def uncheck_line(request: Request, list_id: int, line_id: int) -> HTMLResponse | RedirectResponse:
-    connection = request.app.state.db
+def uncheck_line(
+    request: Request,
+    list_id: int,
+    line_id: int,
+    connection: DbConnection,
+) -> HTMLResponse | RedirectResponse:
     try:
         shopping_service.uncheck_line(connection, list_id=list_id, line_id=line_id)
     except shopping_service.LineNotFoundError:
@@ -289,9 +294,10 @@ def uncheck_line(request: Request, list_id: int, line_id: int) -> HTMLResponse |
 
 
 @router.post("/liste/{list_id}/alles-gekauft", response_model=None)
-def check_all_lines(request: Request, list_id: int) -> HTMLResponse | RedirectResponse:
+def check_all_lines(
+    request: Request, list_id: int, connection: DbConnection
+) -> HTMLResponse | RedirectResponse:
     """„Alles gekauft“ (O1, R2): der Standardweg nach dem Einkauf, ein Tap für die ganze Liste."""
-    connection = request.app.state.db
     try:
         shopping_service.check_all_open_lines(connection, list_id)
     except shopping_service.ShoppingListNotFoundError:
@@ -303,8 +309,9 @@ def check_all_lines(request: Request, list_id: int) -> HTMLResponse | RedirectRe
 
 
 @router.post("/liste/{list_id}/abschliessen", response_model=None)
-def complete_list(request: Request, list_id: int) -> HTMLResponse | RedirectResponse:
-    connection = request.app.state.db
+def complete_list(
+    request: Request, list_id: int, connection: DbConnection
+) -> HTMLResponse | RedirectResponse:
     try:
         shopping_service.complete_list(connection, list_id)
     except shopping_service.ShoppingListNotFoundError:
