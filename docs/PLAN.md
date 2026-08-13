@@ -12,7 +12,10 @@ Testdruck, Messung der Kalibrierseite und Scanprobe am geklebten Etikett (§9, M
 & Ladenzuordnung) umgesetzt — der geänderte Export ist wie M4 noch nicht auf dem iPhone
 durchgespielt worden (§9, M7). M8 (Verbrauchshistorie & Prognose) umgesetzt — mit einem
 ausstehenden Punkt: ob die gerechnete Reichweite im echten Haushalt plausibel ist, kann erst
-Wochen echter Buchungen zeigen, keine Testsuite (§9, M8).
+Wochen echter Buchungen zeigen, keine Testsuite (§9, M8). M9 (Backup & Restore) umgesetzt — mit
+einem ausstehenden Punkt: der Container-Teil des Restore-Rundlaufs ist mangels Docker in der
+Entwicklungsumgebung ungeprüft, ebenso der Cron-Lauf und die Kopie auf ein Gerät außerhalb des Pi
+(§9, M9).
 
 ---
 
@@ -109,14 +112,19 @@ app/
     labels.py             Etikettenraster, Rasterprüfung, Bogenaufteilung   (M5)
     grouping.py           Sortierung/Gruppierung nach Laden und Kategorie   (M7)
     forecast.py           Verbrauchsrate, Reichweite, Schwellenvorschlag   (M8)
+    retention.py          Aufbewahrungsregel für Backups, Parsen von BACKUP_KEEP   (M9)
+    stammdaten.py         JSON/CSV ↔ StammdatenExport, reines Parsen/Formatieren   (M9)
   repo/
     items.py  movements.py  shopping_lists.py  taxonomy.py
   services/
     stock.py              Entnahme, Zugang, Inventur, Rückgängig
     shopping.py           Liste erzeugen, abgleichen, abhaken, abschließen
     labels.py             QR-Erzeugung, Bogenaufteilung
+    backup.py             Sicherung über sqlite3 .backup() + gzip, Aufbewahrung   (M9)
+    restore.py            Backup zurückspielen, Alt-Stand/-wal/-shm beiseitelegen   (M9)
+    stammdaten.py         Export/Import lesen/schreiben, atomar über book_create_item()   (M9)
   web/                    HTML-Router
-    board.py  items.py  scan.py  shopping.py  labels.py  history.py  taxonomy.py
+    board.py  items.py  scan.py  shopping.py  labels.py  history.py  taxonomy.py  stammdaten.py (M9)
   api/
     export.py  health.py
   templates/              Jinja2, base + Seiten + HTMX-Partials
@@ -129,10 +137,13 @@ migrations/               0001_init.sql, 0002_….sql
 tests/
   domain/  services/  web/  api/  conftest.py
 ops/
-  Dockerfile  compose.yaml  ETIKETTEN.md  backup.py  BETRIEB.md
+  Dockerfile  compose.yaml  ETIKETTEN.md  backup.py  restore.py  BACKUP.md   (M9)
 docs/
   PROJEKT-PROMPT.md  PLAN.md  KURZBEFEHL.md  adr/
 ```
+
+`ops/BETRIEB.md` (M6) ist hier bewusst **nicht** aufgeführt — es existiert noch nicht (M6 steht
+aus). `ops/BACKUP.md` deckt Sicherung und Restore vorerst allein ab (Fragerunde M9, Frage 2).
 
 ---
 
@@ -509,6 +520,12 @@ englischen.
 | GET | `/verlauf` | Haushaltsübersicht: aktive Artikel nach Reichweite sortiert | 8 |
 | GET | `/artikel/{id}/verlauf` | vollständiges Journal eines Artikels, Verbrauchsrate, Reichweite, Schwellenvorschlag | 8 |
 | POST | `/artikel/{id}/verlauf/uebernehmen` | Schwellenvorschlag als `reorder_level` übernehmen (Fragerunde M8, Frage 3) | 8 |
+| GET | `/stammdaten` | Seite: Export-Links, Import-Formular, Zähler | 9 |
+| GET | `/stammdaten/export.json` · `/export.csv` | Stammdaten herunterladen (Artikel, Kategorien, Läden, ohne Bewegungen) | 9 |
+| POST | `/stammdaten/import` | Datei hochladen, Format an `.json`/`.csv` erkannt, alles-oder-nichts | 9 |
+
+`/stammdaten` ist §7 seit M9 hinzugefügt worden — die Fragerunde entschied sich für UI-Endpunkte
+statt eines CLI-Skripts (Frage 3, gegen die ursprüngliche Empfehlung), siehe M9 unten.
 
 **Zum HTMX-Partial (ab M4):** Abhaken und Zurücknehmen antworten nur dann mit dem Zeilen-Partial,
 wenn der Header `HX-Request` gesetzt ist; ohne JavaScript sendet der Browser das darunterliegende
@@ -786,16 +803,78 @@ Buchungen, Division durch Null.
 
 ### M9 — Backup und Restore
 
+**Status:** erledigt — **mit einem ausstehenden Punkt:** Der Container-Teil des Restore-Rundlaufs
+(`docker compose stop`/`up`) konnte in der Entwicklungsumgebung nicht geprüft werden, weil dort
+kein laufender Docker-Daemon zur Verfügung stand. Stattdessen wurde derselbe Rundlauf mit einer
+echten Datenbankdatei und der laufenden App durchgeführt (siehe unten) — das ist der Nachweis, den
+`ops/BACKUP.md` beschreibt. Ebenfalls ungeprüft: der tatsächliche Cron-Lauf auf dem Pi, der Zugriff
+auf das benannte Docker-Volume aus einem Host-Cron heraus, und die Kopie eines Backups auf ein
+Gerät außerhalb des Pi (Frage 4 unten — bewusst noch nicht automatisiert). Alles andere aus der
+Definition of Done ist umgesetzt und getestet.
+
 **Ziel:** Ein SD-Karten-Tod kostet Bastelzeit, keine Daten.
 **Drin:** `ops/backup.py` über die SQLite-`.backup`-API (**kein** `cp` auf eine offene Datenbank —
-das erzeugt im WAL-Modus stille Inkonsistenz), gzip, Aufbewahrung 7 täglich + 4 wöchentlich,
-Auslösung per Host-Cron, Stammdaten-Export/-Import als JSON und CSV.
+das erzeugt im WAL-Modus stille Inkonsistenz), gzip, Aufbewahrung 7 täglich + 4 wöchentlich
+(`app/domain/retention.py`), `ops/restore.py` für den Rückweg, Stammdaten-Export/-Import als JSON
+und CSV über die Seite `/stammdaten`.
+**Draußen:** Point-in-Time-Recovery, Off-Site-Dienst, Verschlüsselung der Backups, die eigentliche
+Kopie auf ein externes Gerät (siehe Frage 4).
 **Abhängigkeiten:** M1.
-**Definition of Done:** Ein Restore ist **durchgeführt** worden — Backup auf einen leeren Container
-zurückgespielt, Board zeigt denselben Stand; der Weg steht in `BETRIEB.md`; das Backup liegt
-nachweislich nicht nur auf der SD-Karte.
-**Testfokus:** Backup während laufender Schreibzugriffe ist lesbar, Aufbewahrungsregel löscht das
-Richtige, Import lehnt kaputte Dateien ab, ohne bestehende Daten anzufassen.
+**Definition of Done:** Ein Restore ist **durchgeführt** worden — Backup zurückgespielt, Board
+zeigt denselben Stand (siehe "Durchgeführter Restore-Rundlauf" unten); der Weg steht in
+`ops/BACKUP.md` (Frage 2, nicht `BETRIEB.md` — das ist M6 vorbehalten); das Backup liegt technisch
+nachweislich nicht nur auf der SD-Karte (getrennter Prozess, getrennte Datei), der Weg auf ein
+zweites *Gerät* ist als bewusst offener Punkt dokumentiert (Frage 4).
+**Testfokus:** Backup während laufender Schreibzugriffe ist lesbar (`TestBackupDuringConcurrentWrites`,
+echte Threads, echte Datei), Aufbewahrungsregel löscht das Richtige (27 tabellengetriebene Fälle in
+`tests/domain/test_retention.py`), Import lehnt kaputte Dateien ab, ohne bestehende Daten
+anzufassen (`tests/services/test_stammdaten_service.py`, `tests/domain/test_stammdaten_format.py`).
+
+**In M9 entschieden** (Fragerunde mit dem Nutzer, CLAUDE.md §1):
+
+- **Frage 1 — Aufbewahrung:** wie empfohlen — „zwei Töpfe nach Alter“: die 7 jüngsten Backups
+  plus, aus dem Rest, je das jüngste Backup einer ISO-Kalenderwoche für die letzten 4 Wochen, in
+  denen überhaupt eines übrig war. Ein täglicher Lauf über 40 Tage behält damit 11 Dateien
+  (7 + 4) und deckt gut fünf Wochen ab, unabhängig von Wochentag oder Cron-Lücken. Umgesetzt in
+  `app/domain/retention.py::select_backups_to_keep` und `parse_backup_keep`.
+- **Frage 2 — Dokumentation:** wie empfohlen — eigenständige `ops/BACKUP.md` nach dem Vorbild von
+  `ops/ETIKETTEN.md`. `ops/BETRIEB.md` bleibt M6 vorbehalten und existiert noch nicht; §2 führt es
+  entsprechend nicht auf.
+- **Frage 3 — Stammdaten-Export/-Import:** **gegen** die ursprüngliche Empfehlung „CLI-Skripte in
+  `ops/`“ — UI-Endpunkte unter `/stammdaten` (§7). Umfang wie empfohlen: `items` (samt
+  `lead_days`), `categories`, `stores` — **ohne** `movements` und ohne Einkaufslisten (dafür ist
+  das Datenbank-Backup da). Import legt nur an, was noch nicht existiert; jeder Namenskonflikt
+  **oder** eine Referenz auf eine nirgends deklarierte Kategorie/einen nirgends deklarierten Laden
+  verwirft den **gesamten** Import atomar (eine Transaktion, alle Probleme werden gesammelt und
+  auf Deutsch gemeldet), ohne bestehende Daten anzufassen — Details und die dabei getroffenen,
+  nicht in der Fragerunde selbst entschiedenen Detailfestlegungen (CSV-Format ohne leere
+  Kategorien/Läden, `qr_token` bewusst nicht Teil des Formats) stehen als sichtbare Annahme in
+  `app/domain/stammdaten.py`. Artikel entstehen über die neu herausgelöste
+  `app/services/stock.py::book_create_item()` (dieselbe Journal-Invariante wie `create_item()`,
+  aber innerhalb einer bereits offenen Transaktion — nach dem Muster von `book_restock()`).
+- **Frage 4 — Backup-Ziel außerhalb des Pi:** **gegen** die ursprüngliche Empfehlung (zweiter
+  Cron-Eintrag mit `rsync`/`scp`) — in diesem Durchgang **nichts automatisiert**, weil noch kein
+  Gerät im Haushalt dafür feststeht. `ops/backup.py` bleibt zielsystem-unwissend und schreibt nur
+  nach `HOMEKANBAN_BACKUP_DIR`; der Weg nach draußen ist in `ops/BACKUP.md` als bewusst manueller,
+  noch unautomatisierter Schritt beschrieben. Damit bleibt R5 zum Teil offen — siehe dort.
+
+**Durchgeführter Restore-Rundlauf** (Definition of Done): Mit einer echten SQLite-Datei und der
+laufenden App (kein Docker in der Entwicklungsumgebung verfügbar) über `uvicorn`: Artikel
+„Klopapier“ angelegt, eine Entnahme über `/e/{token}/entnahme` gebucht (Bestand 10 → 9), Board
+geprüft, App gestoppt, `ops/backup.py` ausgeführt, Datenbankdatei gelöscht (simulierter
+Kartentod), `ops/restore.py` ausgeführt, App neu gestartet: `GET /healthz` lieferte
+`{"status": "ok"}`, das Board zeigte „Klopapier“ mit Bestand 9 — derselbe Stand wie vor dem
+simulierten Ausfall. Zusätzlich automatisiert nachgewiesen in
+`tests/test_ops_backup_cli.py`/`tests/test_ops_restore_cli.py` (echte Prozessaufrufe der beiden
+Skripte) und `tests/services/test_restore_service.py` (Restore mit Artikeln, Bewegungen **und**
+einer Einkaufsliste in eine leere Datenbank, inklusive `find_ledger_invariant_violations() == []`).
+Ungeprüft blieb ausschließlich der Container-Teil (`docker compose stop`/`up`) — siehe Status oben.
+
+**Kein neues ADR:** Die beiden Kandidaten aus der Aufgabenstellung tragen hier keinen — das
+Stammdaten-Format ist reine UI-Bequemlichkeit, kein Vertrag mit einem externen Werkzeug (anders
+als der Kurzbefehl-Export in §6), und das Backup-Format ist unverändertes gzip über eine
+unveränderte SQLite-Datei — mit `gunzip`/`sqlite3` auf jedem System lesbar, kein eigenes,
+schwer umkehrbares Format.
 
 ---
 
@@ -807,7 +886,7 @@ Richtige, Import lehnt kaputte Dateien ab, ohne bestehende Daten anzufassen.
 | R2 | **Doppeltes Abhaken:** In der Notiz wird im Laden abgehakt, gebucht wird aber in der App. | Doppelte Arbeit, und genau daran stirbt die Disziplin. | Auf `/liste` ein „Alles gekauft“-Button, der alle offenen Positionen in einem Zug bucht — dann kostet der Heimweg einen Tap. Die Notiz ist die Ansicht im Laden, die App die Buchung. **Offene Frage O1.** |
 | R3 | **Bestandsdrift** durch nicht gescannte Entnahmen. | Die Liste wird unglaubwürdig, danach nutzt sie keiner mehr. | „Bestand korrigieren“ ist auf jeder Entnahmeseite erreichbar, nicht in einem Untermenü; M8 markiert unplausibel niedrigen Verbrauch; Etiketten kleben am Entnahmeort, nicht am Vorratsschrank. Vollständig lösen lässt sich das nicht — die Gegenmaßnahme ist, dass Korrigieren so billig ist wie Buchen. |
 | R4 | **Kollision mit „Hängt!“** über Port, Hostname oder Speicher. | Im schlimmsten Fall steht die bestehende App. | Eigener Container, eigenes Volume, Port aus `.env` mit Prüfschritt in M6, Speicherlimit im Compose. Vor dem ersten Start zu klären (A1). |
-| R5 | **SD-Karten-Ausfall.** | Totalverlust von Historie und Stammdaten. | WAL, `synchronous=NORMAL`, keine Logs auf die Karte, M9 mit geprüftem Restore, Backup-Ziel außerhalb des Pi. Empfehlung: Systemlaufwerk auf USB-SSD. |
+| R5 | **SD-Karten-Ausfall.** | Totalverlust von Historie und Stammdaten. | **Umgesetzt in M9**, nicht mehr nur geplant: WAL, `synchronous=NORMAL`, keine Logs auf die Karte weiterhin aus M0; `ops/backup.py` (Sicherung), `ops/restore.py` (Rückweg, tatsächlich durchgeführt, siehe §9 M9), Aufbewahrungsregel (`app/domain/retention.py`). **Restrisiko:** Ein Backup-Ziel *außerhalb* des Pi ist bewusst noch nicht automatisiert (Fragerunde M9, Frage 4) — solange nur von Hand kopiert wird, schützt M9 vor einer kaputten Datenbankdatei, aber noch nicht zuverlässig vor dem Verlust der ganzen Karte. Empfehlung weiterhin: Systemlaufwerk auf USB-SSD. |
 | R6 | **`BASE_URL` ändert sich** nach dem Etikettendruck. | Alle geklebten QR-Codes zeigen ins Nichts. | **Entschieden in M5:** `http://homekanban.local:8181` — eigener mDNS-Name statt IP und statt `raspberrypi.local` (§8). Als „nicht ohne Neudruck ändern“ in [`ops/ETIKETTEN.md`](../ops/ETIKETTEN.md) vermerkt, gehört in M6 auch nach `BETRIEB.md`. **Restrisiko:** Der Port `8181` steckt mit in jedem Code und ist bis M6 unbestätigt (A1) — der `ss -ltnp`-Nachweis muss vor dem ersten Ausdruck erfolgen. Erwägenswert bleibt eine Weiterleitung, die alte Basis-URLs toleriert. |
 | R7 | **Gleichzeitige Schreibzugriffe** auf SQLite. | `database is locked` mitten im Scan. | WAL, `busy_timeout=5000`, kurze Transaktionen, keine Transaktion über einen Render-Vorgang hinweg. In M6 mit zwei Geräten geprüft. **Offener Defekt, siehe unten.** |
 | R8 | **Die App wird nach drei Wochen nicht mehr benutzt.** Das ist das eigentliche Projektrisiko. | Aufwand ohne Nutzen. | Zwei-Tap-Anspruch als Abnahmekriterium in M3, kein Login, früher Echtbetrieb ab M3 statt großer Fertigstellung, wenige Artikel zu Beginn (10–15 statt „alles“). |

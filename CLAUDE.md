@@ -75,7 +75,14 @@ Rate nicht bei Entscheidungen, die dem Nutzer gehören.
   `lead_days` (seit M8 Spalte auf `items`, zuvor nur `HOMEKANBAN_LEAD_DAYS`), „zu wenig Daten“ →
   `has_enough_data` (Feld auf `ConsumptionRate`/`ReachEstimate`, bewusst kein `None`, das
   versehentlich als 0 durchgehen könnte), Beobachtungszeitraum → `observed_days` (Spanne zwischen
-  ältester und jüngster Entnahme im Ratenfenster, nicht die Fensterlänge selbst).
+  ältester und jüngster Entnahme im Ratenfenster, nicht die Fensterlänge selbst), Sicherung →
+  `backup` (`app/services/backup.py::create_backup`, über `sqlite3.Connection.backup()`, nie
+  `cp`), Wiederherstellung → `restore` (`app/services/restore.py::restore_backup`),
+  Aufbewahrungsregel → `retention` (`app/domain/retention.py`, Funktion
+  `select_backups_to_keep`; Aufbewahrungsstufen täglich/wöchentlich → `daily`/`weekly` auf
+  `RetentionPolicy`), Stammdaten-Export/-Import → `stammdaten` (`app/domain/stammdaten.py`:
+  Formate; `app/services/stammdaten.py`: `export_stammdaten`/`import_stammdaten`; UI unter
+  `/stammdaten`, seit M9 — kein CLI-Skript, siehe docs/PLAN.md §9 M9 Frage 3).
   Erweitere das Glossar, wenn ein neuer Begriff dazukommt.
 
 ## 3. Gesetzte Entscheidungen
