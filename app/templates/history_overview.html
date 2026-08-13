@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Verlauf – HomeKanban{% endblock %}
+{% block content %}
+  <a class="back-link" href="/">← Zurück zum Board</a>
+  <h1>Verlauf</h1>
+  <p class="list-refresh__hint">
+    Alle Artikel nach Reichweite sortiert — was zuerst ausgeht, steht oben. Grundlage sind die
+    Entnahmen der letzten 90 Tage.
+  </p>
+
+  {% if with_forecast %}
+    <ul class="item-list">
+      {% for entry in with_forecast %}
+        <li>
+          <a class="item-card" href="/artikel/{{ entry.item.id }}/verlauf">
+            <span class="item-card__name">{{ entry.item.name }}</span>
+            <span class="item-card__stock">{{ entry.item.stock }} {{ entry.item.unit }}</span>
+            {% if entry.reach.is_unlimited %}
+              <span class="item-card__hint">Reichweite: unbegrenzt (Rate 0)</span>
+            {% else %}
+              <span class="item-card__hint">Reichweite: rund {{ entry.reach.days|round(1) }} Tage</span>
+            {% endif %}
+          </a>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="list-empty">Für keinen Artikel liegt bisher genug Verbrauchsdaten vor.</p>
+  {% endif %}
+
+  {% if without_forecast %}
+    <section class="list-group">
+      <h2 class="list-group__label">Zu wenig Daten</h2>
+      <p class="list-refresh__hint">
+        Normal, gerade am Anfang: Erst ab drei Entnahmen und 14 Tagen Historie zeigt HomeKanban
+        eine Reichweite.
+      </p>
+      <ul class="item-list">
+        {% for entry in without_forecast %}
+          <li>
+            <a class="item-card" href="/artikel/{{ entry.item.id }}/verlauf">
+              <span class="item-card__name">{{ entry.item.name }}</span>
+              <span class="item-card__stock">{{ entry.item.stock }} {{ entry.item.unit }}</span>
+            </a>
+          </li>
+        {% endfor %}
+      </ul>
+    </section>
+  {% endif %}
+{% endblock %}

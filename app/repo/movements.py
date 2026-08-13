@@ -131,12 +131,63 @@ def sum_delta_for_item(connection: sqlite3.Connection, item_id: int) -> int:
 
 
 def list_for_item(
-    connection: sqlite3.Connection, item_id: int, *, limit: int = 20
+    connection: sqlite3.Connection, item_id: int, *, limit: int | None = 20
 ) -> list[MovementRow]:
-    """Verlauf für die Detailseite: neueste zuerst, begrenzt auf `limit` Einträge."""
+    """Verlauf: neueste zuerst. `limit=None` liefert das vollständige, ungekürzte Journal
+    (`/artikel/{id}/verlauf`, M8); der Standard von 20 bleibt die kurze Vorschau auf der
+    Artikel-Detailseite."""
+    if limit is None:
+        rows = connection.execute(
+            "SELECT * FROM movements WHERE item_id = ? ORDER BY created_at DESC, id DESC",
+            (item_id,),
+        ).fetchall()
+    else:
+        rows = connection.execute(
+            "SELECT * FROM movements WHERE item_id = ? ORDER BY created_at DESC, id DESC LIMIT ?",
+            (item_id, limit),
+        ).fetchall()
+    return [_row_to_movement(row) for row in rows]
+
+
+# Gemeinsamer Kern der beiden folgenden Abfragen: Entnahmen ohne Gegenbuchungen und ohne die
+# Ursprünge zurückgenommener Entnahmen (docs/PLAN.md §9, M8). Der LEFT JOIN findet zu jeder
+# Bewegung ihre eigene Gegenbuchung, falls es sie gibt; `r.id IS NULL` schließt sie aus.
+# `m.reverts_movement_id IS NULL` schließt die Gegenbuchung selbst aus (sie ist ebenfalls vom Kind
+# 'withdrawal', siehe app/services/stock.py::book_reversal). Eine mengenbasierte Abfrage statt
+# einer Schleife mit `find_reversal` je Bewegung — dasselbe Prinzip wie `open_unchecked_item_ids`
+# in `app/repo/shopping_lists.py`.
+_UNREVERTED_WITHDRAWALS_CORE = """
+    FROM movements m
+    LEFT JOIN movements r ON r.reverts_movement_id = m.id
+    WHERE m.kind = 'withdrawal'
+      AND m.created_at >= ?
+      AND m.reverts_movement_id IS NULL
+      AND r.id IS NULL
+"""
+
+
+def list_unreverted_withdrawals_for_item_since(
+    connection: sqlite3.Connection, item_id: int, *, since: str
+) -> list[MovementRow]:
+    """Unbereinigte Entnahmen **eines** Artikels seit `since` (UTC-ISO-8601), älteste zuerst —
+    Grundlage für die Verbrauchsrate auf `/artikel/{id}/verlauf`."""
     rows = connection.execute(
-        "SELECT * FROM movements WHERE item_id = ? ORDER BY created_at DESC, id DESC LIMIT ?",
-        (item_id, limit),
+        f"SELECT m.* {_UNREVERTED_WITHDRAWALS_CORE} AND m.item_id = ? "
+        "ORDER BY m.created_at ASC, m.id ASC",
+        (since, item_id),
+    ).fetchall()
+    return [_row_to_movement(row) for row in rows]
+
+
+def list_unreverted_withdrawals_since(
+    connection: sqlite3.Connection, *, since: str
+) -> list[MovementRow]:
+    """Unbereinigte Entnahmen **aller** Artikel seit `since`, älteste zuerst — eine einzige
+    Abfrage für die Haushaltsübersicht `/verlauf`, keine Abfrage je Artikel (docs/PLAN.md, M2-
+    Kriterium, hier auf M8 angewendet). Der Aufrufer gruppiert per `item_id` in Python."""
+    rows = connection.execute(
+        f"SELECT m.* {_UNREVERTED_WITHDRAWALS_CORE} ORDER BY m.item_id, m.created_at ASC, m.id ASC",
+        (since,),
     ).fetchall()
     return [_row_to_movement(row) for row in rows]
 

@@ -321,7 +321,9 @@ class Test0002ShoppingListTaxonomySnapshots:
 
         applied = migrate(raw_connection, MIGRATIONS_DIR)
 
-        assert applied == ["0002_shopping_list_taxonomy_snapshots.sql"]
+        # "in" statt Gleichheit, damit eine spätere Migration (hier: 0003) diesen Test nicht
+        # bricht — dasselbe Prinzip wie beim 0001-Test oben.
+        assert "0002_shopping_list_taxonomy_snapshots.sql" in applied
         line = raw_connection.execute(
             "SELECT * FROM shopping_list_lines WHERE list_id = ?", (list_id,)
         ).fetchone()
@@ -329,3 +331,63 @@ class Test0002ShoppingListTaxonomySnapshots:
         assert line["unit_snapshot"] == "Packung"
         assert line["store_snapshot"] is None
         assert line["category_position_snapshot"] is None
+
+
+class Test0003ItemLeadDays:
+    """0003_item_lead_days.sql — M8, Frage 4 der Fragerunde (docs/PLAN.md §9/§10, O3)."""
+
+    def test_adds_lead_days_column_defaulting_to_seven(
+        self, raw_connection: sqlite3.Connection
+    ) -> None:
+        applied = migrate(raw_connection, MIGRATIONS_DIR)
+
+        assert "0003_item_lead_days.sql" in applied
+        item_id = _create_minimal_item(raw_connection)
+        row = raw_connection.execute(
+            "SELECT lead_days FROM items WHERE id = ?", (item_id,)
+        ).fetchone()
+        assert row["lead_days"] == 7
+
+    def test_lead_days_below_one_violates_check(self, raw_connection: sqlite3.Connection) -> None:
+        migrate(raw_connection, MIGRATIONS_DIR)
+
+        with pytest.raises(sqlite3.IntegrityError):
+            raw_connection.execute(
+                """
+                INSERT INTO items (
+                    name, unit, stock, reorder_level, target_stock, pack_size,
+                    qr_token, position, created_at, updated_at, lead_days
+                ) VALUES ('Kaffee', 'Packung', 1, 0, 1, 1, 'token-lead-days', 0, ?, ?, 0)
+                """,
+                (_NOW, _NOW),
+            )
+
+    def test_existing_database_with_data_survives_the_upgrade(
+        self, raw_connection: sqlite3.Connection
+    ) -> None:
+        """Wie bei 0002: eine Datenbank, auf der zuvor nur 0001/0002 liefen, muss die additive
+        Migration ohne Datenverlust überstehen (CLAUDE.md §4)."""
+        init_sql = (MIGRATIONS_DIR / "0001_init.sql").read_text(encoding="utf-8")
+        snapshots_sql = (MIGRATIONS_DIR / "0002_shopping_list_taxonomy_snapshots.sql").read_text(
+            encoding="utf-8"
+        )
+        raw_connection.executescript(f"BEGIN;\n{init_sql}\n{snapshots_sql}\nCOMMIT;")
+        raw_connection.execute(
+            "CREATE TABLE schema_migrations (version TEXT PRIMARY KEY, applied_at TEXT)"
+        )
+        for version in ("0001_init.sql", "0002_shopping_list_taxonomy_snapshots.sql"):
+            raw_connection.execute(
+                "INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)",
+                (version, _NOW),
+            )
+
+        item_id = _create_minimal_item(raw_connection, name="Kaffee")
+
+        applied = migrate(raw_connection, MIGRATIONS_DIR)
+
+        assert "0003_item_lead_days.sql" in applied
+        row = raw_connection.execute(
+            "SELECT name, lead_days FROM items WHERE id = ?", (item_id,)
+        ).fetchone()
+        assert row["name"] == "Kaffee"
+        assert row["lead_days"] == 7

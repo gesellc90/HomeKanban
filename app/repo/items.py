@@ -23,6 +23,7 @@ class ItemRow:
     archived_at: str | None
     created_at: str
     updated_at: str
+    lead_days: int
 
 
 def _row_to_item(row: sqlite3.Row) -> ItemRow:
@@ -42,6 +43,7 @@ def _row_to_item(row: sqlite3.Row) -> ItemRow:
         archived_at=row["archived_at"],
         created_at=row["created_at"],
         updated_at=row["updated_at"],
+        lead_days=row["lead_days"],
     )
 
 
@@ -61,13 +63,14 @@ def insert(
     position: int,
     created_at: str,
     updated_at: str,
+    lead_days: int,
 ) -> int:
     cursor = connection.execute(
         """
         INSERT INTO items (
             name, unit, note, stock, reorder_level, target_stock, pack_size,
-            category_id, store_id, qr_token, position, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            category_id, store_id, qr_token, position, created_at, updated_at, lead_days
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             name,
@@ -83,6 +86,7 @@ def insert(
             position,
             created_at,
             updated_at,
+            lead_days,
         ),
     )
     assert cursor.lastrowid is not None
@@ -139,6 +143,7 @@ def update(
     pack_size: int,
     category_id: int | None,
     store_id: int | None,
+    lead_days: int,
     updated_at: str,
 ) -> None:
     """Ändert Stammdaten. `stock` ist absichtlich nicht dabei — Bestand ändert sich nur über
@@ -148,7 +153,7 @@ def update(
         """
         UPDATE items
         SET name = ?, unit = ?, note = ?, reorder_level = ?, target_stock = ?, pack_size = ?,
-            category_id = ?, store_id = ?, updated_at = ?
+            category_id = ?, store_id = ?, lead_days = ?, updated_at = ?
         WHERE id = ?
         """,
         (
@@ -160,9 +165,24 @@ def update(
             pack_size,
             category_id,
             store_id,
+            lead_days,
             updated_at,
             item_id,
         ),
+    )
+
+
+def update_reorder_level(
+    connection: sqlite3.Connection, item_id: int, *, reorder_level: int, updated_at: str
+) -> None:
+    """Ändert nur den Mindestbestand — der schmale Weg für die Übernahme des Schwellenvorschlags
+    (docs/PLAN.md §9, M8, Frage 3: nachvollziehbar wie jede andere Stammdatenänderung über
+    `updated_at`, kein Eingriff in `movements`). Anders als `update()` fasst diese Funktion die
+    übrigen Stammdaten nicht an — ein `Übernehmen` darf nie versehentlich zwischenzeitlich
+    geänderte Felder überschreiben."""
+    connection.execute(
+        "UPDATE items SET reorder_level = ?, updated_at = ? WHERE id = ?",
+        (reorder_level, updated_at, item_id),
     )
 
 

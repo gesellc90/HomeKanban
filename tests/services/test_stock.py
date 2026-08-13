@@ -130,6 +130,22 @@ class TestWithdraw:
         with pytest.raises(stock.ItemNotFoundError):
             stock.withdraw(connection, item_id=999_999, quantity=1, source="qr")
 
+    def test_now_override_backdates_the_movement(self, connection: sqlite3.Connection) -> None:
+        # ops/seed.py bucht synthetische Historie über diesen Parameter (M8) — nie über einen
+        # Rohzugriff, damit die Journal-Invariante gewahrt bleibt.
+        item_id = _create_item(connection, initial_stock=5)
+
+        movement_id = stock.withdraw(
+            connection, item_id=item_id, quantity=1, source="import", now="2020-01-01T00:00:00.000Z"
+        )
+
+        movement = movements_repo.get_by_id(connection, movement_id)
+        assert movement is not None
+        assert movement.created_at == "2020-01-01T00:00:00.000Z"
+        item = items_repo.get_by_id(connection, item_id)
+        assert item is not None
+        assert item.updated_at == "2020-01-01T00:00:00.000Z"
+
 
 class TestRestock:
     def test_increases_stock_and_records_positive_delta(
@@ -153,6 +169,17 @@ class TestRestock:
 
         with pytest.raises(ValueError):
             stock.restock(connection, item_id=item_id, quantity=0, source="board")
+
+    def test_now_override_backdates_the_movement(self, connection: sqlite3.Connection) -> None:
+        item_id = _create_item(connection, initial_stock=1)
+
+        movement_id = stock.restock(
+            connection, item_id=item_id, quantity=1, source="import", now="2020-01-01T00:00:00.000Z"
+        )
+
+        movement = movements_repo.get_by_id(connection, movement_id)
+        assert movement is not None
+        assert movement.created_at == "2020-01-01T00:00:00.000Z"
 
 
 class TestApplyInventory:

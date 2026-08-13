@@ -3,13 +3,16 @@
 Kanban-Verwaltung für Alltagsverbrauchsmittel im Haushalt — läuft im Heimnetz auf einem
 Raspberry Pi, parallel zur bestehenden Web-App „Hängt! – jeder Strich zählt“.
 
-> **Status: M0–M5 und M7 umgesetzt (Fundament, Domänenmodell & Persistenz, Board & Artikelpflege,
-> QR-Entnahme-Flow, Einkaufsliste & Apple-Notes-Export, Etiketten, Kategorien & Ladenzuordnung).**
-> Drei Punkte stehen noch aus, alle brauchen ein iPhone oder einen Drucker statt Code: Der
-> iOS-Kurzbefehl aus M4 ist noch nicht auf dem iPhone durchgeführt worden — das gilt seit M7 auch
-> für den geänderten, gruppierten Export ([`docs/KURZBEFEHL.md`](docs/KURZBEFEHL.md)) —, und die
-> Etiketten aus M5 sind noch nicht gedruckt, gemessen und gescannt
-> ([`ops/ETIKETTEN.md`](ops/ETIKETTEN.md)).
+> **Status: M0–M5, M7 und M8 umgesetzt (Fundament, Domänenmodell & Persistenz, Board &
+> Artikelpflege, QR-Entnahme-Flow, Einkaufsliste & Apple-Notes-Export, Etiketten, Kategorien &
+> Ladenzuordnung, Verbrauchshistorie & Prognose).**
+> Drei Punkte stehen noch aus, alle brauchen ein iPhone, einen Drucker oder Wochen echter Nutzung
+> statt Code: Der iOS-Kurzbefehl aus M4 ist noch nicht auf dem iPhone durchgeführt worden — das
+> gilt seit M7 auch für den geänderten, gruppierten Export
+> ([`docs/KURZBEFEHL.md`](docs/KURZBEFEHL.md)) —, die Etiketten aus M5 sind noch nicht gedruckt,
+> gemessen und gescannt ([`ops/ETIKETTEN.md`](ops/ETIKETTEN.md)), und ob die in M8 gerechnete
+> Reichweite im echten Haushalt plausibel ist, kann erst echte Buchungshistorie zeigen, keine
+> Testsuite.
 > Anforderungen und Rahmen: [`docs/PROJEKT-PROMPT.md`](docs/PROJEKT-PROMPT.md).
 > Architektur, Datenmodell, Meilensteine, Risiken: [`docs/PLAN.md`](docs/PLAN.md).
 
@@ -49,7 +52,7 @@ abhakbare Checkliste in Apple Notes holt.
 | M5 | Etiketten (Einzel-QR + Druckbögen) | erledigt — Testdruck, Messung und Scanprobe stehen aus |
 | M6 | Deployment auf dem Raspberry Pi | offen |
 | M7 | Kategorien & Ladenzuordnung | erledigt — iPhone-Verifikation des geänderten Exports steht aus |
-| M8 | Verbrauchshistorie & Prognose | offen |
+| M8 | Verbrauchshistorie & Prognose | erledigt — Plausibilität der Reichweite im echten Haushalt steht aus |
 | M9 | Backup & Restore | offen |
 
 Umfang, Definition of Done und Testfokus je Meilenstein: [`docs/PLAN.md`](docs/PLAN.md) §9.
