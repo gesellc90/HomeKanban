@@ -368,6 +368,12 @@ section {
   margin: 0.25rem 0 0.5rem;
 }
 
+.field-hint {
+  color: var(--color-muted);
+  font-size: 0.85rem;
+  margin: -0.5rem 0 0.5rem;
+}
+
 .scan-link__url {
   display: inline-block;
   margin-bottom: 0.5rem;

@@ -8,6 +8,7 @@ _VALID = ItemInput(
     reorder_level=1,
     target_stock=3,
     pack_size=1,
+    lead_days=7,
     stock=2,
     note=None,
 )
@@ -51,6 +52,10 @@ class TestValidateItem:
     def test_pack_size_below_one_is_rejected(self) -> None:
         errors = validate_item(_replace(pack_size=0))
         assert any("Kaufeinheit" in error for error in errors)
+
+    def test_lead_days_below_one_is_rejected(self) -> None:
+        errors = validate_item(_replace(lead_days=0))
+        assert any("Vorlaufzeit" in error for error in errors)
 
     def test_target_stock_equal_to_reorder_level_is_rejected(self) -> None:
         errors = validate_item(_replace(reorder_level=3, target_stock=3))

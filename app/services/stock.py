@@ -51,10 +51,16 @@ class StaleInventoryError(Exception):
         )
 
 
+def format_utc_iso(moment: datetime) -> str:
+    """Formatiert einen `datetime` als UTC-ISO-8601 mit `Z`, Millisekunden (L9) — derselbe
+    Ausgabeformatierer wie `utc_now_iso()`, für Aufrufer, die einen berechneten statt den
+    aktuellen Zeitpunkt formatieren müssen (z. B. `now - 90 Tage` für die Verbrauchsrate, M8)."""
+    return moment.strftime("%Y-%m-%dT%H:%M:%S.") + f"{moment.microsecond // 1000:03d}Z"
+
+
 def utc_now_iso() -> str:
     """Ein einziger Zeitstempel-Helfer: UTC, ISO-8601 mit `Z`, Millisekunden (L9)."""
-    now = datetime.now(UTC)
-    return now.strftime("%Y-%m-%dT%H:%M:%S.") + f"{now.microsecond // 1000:03d}Z"
+    return format_utc_iso(datetime.now(UTC))
 
 
 def _require_item(connection: sqlite3.Connection, item_id: int) -> items_repo.ItemRow:
@@ -78,10 +84,13 @@ def create_item(
     note: str | None = None,
     position: int,
     source: str = "board",
+    lead_days: int = 7,
 ) -> int:
     """Legt einen Artikel an und bucht die anfängliche `opening`-Bewegung.
 
     `qr_token` wird hier vergeben (`secrets.token_urlsafe(16)`); benutzt wird er erst in M3.
+    `lead_days` ist die Vorlaufzeit für den Schwellenvorschlag aus M8 (docs/PLAN.md §9, Frage 4)
+    — seit M8 pro Artikel, der Standardwert 7 spiegelt `HOMEKANBAN_LEAD_DAYS` (app/config.py).
     """
     if stock < 0:
         raise ValueError("Anfangsbestand darf nicht negativ sein")
@@ -104,6 +113,7 @@ def create_item(
             position=position,
             created_at=now,
             updated_at=now,
+            lead_days=lead_days,
         )
         movements_repo.insert(
             connection,
@@ -125,8 +135,14 @@ def withdraw(
     source: str,
     idempotency_key: str | None = None,
     note: str | None = None,
+    now: str | None = None,
 ) -> int:
     """Bucht eine Entnahme. `quantity` ist die entnommene Menge (positive Zahl).
+
+    `now` überschreibt den Zeitstempel (UTC-ISO-8601) und ist ausschließlich für
+    `ops/seed.py` gedacht, um synthetische Verbrauchshistorie über vergangene Wochen zu buchen,
+    ohne an `app/services/stock.py` vorbei zu schreiben (M8, docs/PLAN.md, Aufgabe 6) — die
+    Invariante `SUM(delta) == stock` bleibt dabei gewahrt. Im normalen Betrieb bleibt es `None`.
 
     Idempotenz (§5): Ein zweites Absenden mit demselben `idempotency_key` — Reload,
     Zurück-Button, hektisches Doppeltippen, zwei Personen gleichzeitig (R7) — bucht nicht noch
@@ -154,7 +170,7 @@ def withdraw(
         with transaction(connection):
             item = _require_item(connection, item_id)
             new_stock = item.stock - quantity
-            now = utc_now_iso()
+            timestamp = now or utc_now_iso()
             movement_id = movements_repo.insert(
                 connection,
                 item_id=item_id,
@@ -164,9 +180,9 @@ def withdraw(
                 source=source,
                 idempotency_key=idempotency_key,
                 note=note,
-                created_at=now,
+                created_at=timestamp,
             )
-            items_repo.update_stock(connection, item_id, new_stock, now)
+            items_repo.update_stock(connection, item_id, new_stock, timestamp)
     except sqlite3.IntegrityError:
         if idempotency_key is not None:
             existing = movements_repo.get_by_idempotency_key(connection, idempotency_key)
@@ -258,8 +274,13 @@ def restock(
     line_id: int | None = None,
     idempotency_key: str | None = None,
     note: str | None = None,
+    now: str | None = None,
 ) -> int:
-    """Bucht einen Zugang. `quantity` ist die zugegangene Menge (positive Zahl)."""
+    """Bucht einen Zugang. `quantity` ist die zugegangene Menge (positive Zahl).
+
+    `now` überschreibt den Zeitstempel — wie bei `withdraw()`, ausschließlich für
+    `ops/seed.py` gedacht, um synthetische Historie zu buchen (M8).
+    """
     with transaction(connection):
         movement_id = book_restock(
             connection,
@@ -269,6 +290,7 @@ def restock(
             line_id=line_id,
             idempotency_key=idempotency_key,
             note=note,
+            now=now,
         )
     return movement_id
 

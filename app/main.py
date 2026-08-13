@@ -19,6 +19,7 @@ from app.config import Settings, get_settings
 from app.db import connect
 from app.migrate import migrate
 from app.web.board import router as board_router
+from app.web.history import router as history_router
 from app.web.items import router as items_router
 from app.web.labels import router as labels_router
 from app.web.scan import router as scan_router
@@ -48,6 +49,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(health_router)
     app.include_router(export_router)
     app.include_router(board_router)
+    app.include_router(history_router)
     app.include_router(items_router)
     app.include_router(labels_router)
     app.include_router(scan_router)

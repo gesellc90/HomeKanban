@@ -28,6 +28,7 @@ class ItemInput:
     reorder_level: int
     target_stock: int
     pack_size: int
+    lead_days: int
     stock: int | None = None
     note: str | None = None
 
@@ -46,6 +47,8 @@ def validate_item(item: ItemInput) -> list[str]:
         errors.append("Mindestbestand darf nicht negativ sein.")
     if item.pack_size < 1:
         errors.append("Kaufeinheit muss mindestens 1 sein.")
+    if item.lead_days < 1:
+        errors.append("Vorlaufzeit muss mindestens 1 Tag sein.")
     if item.target_stock <= item.reorder_level:
         errors.append("Sollbestand muss größer als der Mindestbestand sein.")
 

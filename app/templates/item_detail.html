@@ -134,6 +134,22 @@
         value="{{ form_values.pack_size }}"
       />
 
+      <label for="lead_days">Vorlaufzeit (Tage)</label>
+      <input
+        id="lead_days"
+        name="lead_days"
+        type="number"
+        min="1"
+        step="1"
+        required
+        value="{{ form_values.lead_days }}"
+      />
+      <p class="field-hint">
+        Zeit von „Schwelle erreicht“ bis Nachschub im Schrank steht — geht in den
+        Schwellenvorschlag der <a href="/artikel/{{ item.id }}/verlauf">Verbrauchsprognose</a>
+        ein.
+      </p>
+
       <label for="category_id">Kategorie</label>
       <select id="category_id" name="category_id">
         <option value="" {% if form_values.category_id is none %}selected{% endif %}>(keine)</option>
@@ -194,5 +210,8 @@
     {% else %}
       <p>Noch keine Bewegungen.</p>
     {% endif %}
+    <a class="button" href="/artikel/{{ item.id }}/verlauf">
+      Vollständigen Verlauf &amp; Verbrauchsprognose ansehen
+    </a>
   </section>
 {% endblock %}

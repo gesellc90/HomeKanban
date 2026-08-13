@@ -46,6 +46,7 @@ def test_update_changes_stammdaten_but_not_stock(connection: sqlite3.Connection)
         reorder_level=2,
         target_stock=8,
         pack_size=2,
+        lead_days=7,
         category_id=None,
         store_id=None,
         updated_at=_NOW,
@@ -79,6 +80,7 @@ def test_update_persists_category_and_store_assignment(connection: sqlite3.Conne
         reorder_level=1,
         target_stock=5,
         pack_size=1,
+        lead_days=7,
         category_id=category_id,
         store_id=store_id,
         updated_at=_NOW,
@@ -104,10 +106,59 @@ def test_update_to_duplicate_active_name_violates_check(connection: sqlite3.Conn
             reorder_level=1,
             target_stock=5,
             pack_size=1,
+            lead_days=7,
             category_id=None,
             store_id=None,
             updated_at=_NOW,
         )
+
+
+def test_create_item_defaults_lead_days_to_seven(connection: sqlite3.Connection) -> None:
+    item_id = _create(connection)
+
+    item = items_repo.get_by_id(connection, item_id)
+    assert item is not None
+    assert item.lead_days == 7
+
+
+def test_update_changes_lead_days(connection: sqlite3.Connection) -> None:
+    item_id = _create(connection)
+
+    items_repo.update(
+        connection,
+        item_id,
+        name="Kaffee",
+        unit="Packung",
+        note=None,
+        reorder_level=1,
+        target_stock=5,
+        pack_size=1,
+        lead_days=14,
+        category_id=None,
+        store_id=None,
+        updated_at=_NOW,
+    )
+
+    item = items_repo.get_by_id(connection, item_id)
+    assert item is not None
+    assert item.lead_days == 14
+
+
+def test_update_reorder_level_changes_only_that_field(connection: sqlite3.Connection) -> None:
+    item_id = _create(connection)
+    before = items_repo.get_by_id(connection, item_id)
+    assert before is not None
+
+    items_repo.update_reorder_level(connection, item_id, reorder_level=3, updated_at=_NOW)
+
+    after = items_repo.get_by_id(connection, item_id)
+    assert after is not None
+    assert after.reorder_level == 3
+    assert after.updated_at == _NOW
+    assert after.name == before.name
+    assert after.target_stock == before.target_stock
+    assert after.pack_size == before.pack_size
+    assert after.lead_days == before.lead_days
 
 
 def test_reactivate_clears_archived_at(connection: sqlite3.Connection) -> None:

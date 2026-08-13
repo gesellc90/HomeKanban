@@ -46,14 +46,22 @@ class _ItemFormValues:
     reorder_level: int
     target_stock: int
     pack_size: int
+    lead_days: int
     category_id: int | None = None
     store_id: int | None = None
     stock: int = 0
 
 
-def _new_form_defaults() -> _ItemFormValues:
+def _new_form_defaults(*, lead_days: int) -> _ItemFormValues:
     return _ItemFormValues(
-        name="", unit="", note="", reorder_level=1, target_stock=2, pack_size=1, stock=0
+        name="",
+        unit="",
+        note="",
+        reorder_level=1,
+        target_stock=2,
+        pack_size=1,
+        lead_days=lead_days,
+        stock=0,
     )
 
 
@@ -65,6 +73,7 @@ def _form_values_from_item(item: items_repo.ItemRow) -> _ItemFormValues:
         reorder_level=item.reorder_level,
         target_stock=item.target_stock,
         pack_size=item.pack_size,
+        lead_days=item.lead_days,
         category_id=item.category_id,
         store_id=item.store_id,
         stock=item.stock,
@@ -105,7 +114,11 @@ def _parse_taxonomy_id(
 @router.get("/artikel/neu", response_class=HTMLResponse)
 def new_item_form(request: Request) -> HTMLResponse:
     connection = request.app.state.db
-    context: dict[str, Any] = {"values": _new_form_defaults(), "errors": []}
+    settings = request.app.state.settings
+    context: dict[str, Any] = {
+        "values": _new_form_defaults(lead_days=settings.lead_days),
+        "errors": [],
+    }
     context.update(_taxonomy_form_context(connection))
     return templates.TemplateResponse(request, "item_new.html", context)
 
@@ -120,6 +133,7 @@ def create_item(
     reorder_level: int = Form(...),
     target_stock: int = Form(...),
     pack_size: int = Form(1),
+    lead_days: int = Form(7),
     category_id: str = Form(""),
     store_id: str = Form(""),
 ) -> HTMLResponse | RedirectResponse:
@@ -137,6 +151,7 @@ def create_item(
         reorder_level=reorder_level,
         target_stock=target_stock,
         pack_size=pack_size,
+        lead_days=lead_days,
         category_id=resolved_category_id,
         store_id=resolved_store_id,
         stock=stock,
@@ -149,6 +164,7 @@ def create_item(
             reorder_level=reorder_level,
             target_stock=target_stock,
             pack_size=pack_size,
+            lead_days=lead_days,
             stock=stock,
             note=clean_note,
         )
@@ -168,6 +184,7 @@ def create_item(
             reorder_level=reorder_level,
             target_stock=target_stock,
             pack_size=pack_size,
+            lead_days=lead_days,
             category_id=resolved_category_id,
             store_id=resolved_store_id,
             note=clean_note,
@@ -259,6 +276,7 @@ def update_item(
     reorder_level: int = Form(...),
     target_stock: int = Form(...),
     pack_size: int = Form(1),
+    lead_days: int = Form(7),
     category_id: str = Form(""),
     store_id: str = Form(""),
 ) -> HTMLResponse | RedirectResponse:
@@ -277,6 +295,7 @@ def update_item(
         reorder_level=reorder_level,
         target_stock=target_stock,
         pack_size=pack_size,
+        lead_days=lead_days,
         category_id=resolved_category_id,
         store_id=resolved_store_id,
     )
@@ -288,6 +307,7 @@ def update_item(
             reorder_level=reorder_level,
             target_stock=target_stock,
             pack_size=pack_size,
+            lead_days=lead_days,
             note=clean_note,
         )
     )
@@ -312,6 +332,7 @@ def update_item(
             reorder_level=reorder_level,
             target_stock=target_stock,
             pack_size=pack_size,
+            lead_days=lead_days,
             category_id=resolved_category_id,
             store_id=resolved_store_id,
             updated_at=stock_service.utc_now_iso(),

@@ -174,6 +174,50 @@ class TestUpdateItem:
         assert "Bio-Kaffee" in detail.text
         assert "Marke egal" in detail.text
 
+    def test_lead_days_survives_creation_and_update(self, client: TestClient) -> None:
+        # M8, docs/PLAN.md §9/§10 (Frage 4): Vorlaufzeit ist seit M8 pro Artikel.
+        item_id = _create_item(client, name="Kaffee", reorder_level=1, target_stock=5)
+
+        response = client.post(
+            f"/artikel/{item_id}",
+            data={
+                "name": "Kaffee",
+                "unit": "Packung",
+                "note": "",
+                "reorder_level": "1",
+                "target_stock": "5",
+                "pack_size": "1",
+                "lead_days": "14",
+            },
+            follow_redirects=False,
+        )
+
+        assert response.status_code == 303
+        from app.repo import items as items_repo
+
+        item = items_repo.get_by_id(client.app.state.db, item_id)  # type: ignore[attr-defined]
+        assert item is not None
+        assert item.lead_days == 14
+
+    def test_lead_days_below_one_is_rejected(self, client: TestClient) -> None:
+        item_id = _create_item(client, name="Kaffee", reorder_level=1, target_stock=5)
+
+        response = client.post(
+            f"/artikel/{item_id}",
+            data={
+                "name": "Kaffee",
+                "unit": "Packung",
+                "note": "",
+                "reorder_level": "1",
+                "target_stock": "5",
+                "pack_size": "1",
+                "lead_days": "0",
+            },
+        )
+
+        assert response.status_code == 422
+        assert "Vorlaufzeit" in response.text
+
     def test_invalid_update_is_rejected_with_non_500(self, client: TestClient) -> None:
         item_id = _create_item(client, name="Kaffee", reorder_level=1, target_stock=5)
 

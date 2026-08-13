@@ -60,6 +60,21 @@
       value="{{ values.pack_size }}"
     />
 
+    <label for="lead_days">Vorlaufzeit (Tage)</label>
+    <input
+      id="lead_days"
+      name="lead_days"
+      type="number"
+      min="1"
+      step="1"
+      required
+      value="{{ values.lead_days }}"
+    />
+    <p class="field-hint">
+      Zeit von „Schwelle erreicht“ bis Nachschub im Schrank steht — geht in den
+      Schwellenvorschlag der Verbrauchsprognose ein (Verlauf).
+    </p>
+
     <label for="category_id">Kategorie</label>
     <select id="category_id" name="category_id">
       <option value="" {% if values.category_id is none %}selected{% endif %}>(keine)</option>

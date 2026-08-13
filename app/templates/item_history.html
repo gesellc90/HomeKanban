@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Verlauf: {{ item.name }} – HomeKanban{% endblock %}
+{% block content %}
+  <a class="back-link" href="/artikel/{{ item.id }}">← Zurück zum Artikel</a>
+  <h1>Verlauf: {{ item.name }}</h1>
+
+  {% if item.archived_at %}
+    <p class="badge badge--archived">Archiviert am {{ item.archived_at|local_time }}</p>
+    <p class="list-refresh__hint">
+      Für archivierte Artikel gibt es keine Verbrauchsprognose mehr — das Journal bleibt aber
+      einsehbar.
+    </p>
+  {% else %}
+    <section>
+      <h2>Verbrauchsprognose</h2>
+
+      {% if takeover_error %}
+        <ul class="form-errors">
+          <li>{{ takeover_error }}</li>
+        </ul>
+      {% endif %}
+
+      {% if forecast.rate.has_enough_data %}
+        <p class="item-stock">
+          Verbrauchsrate: rund <strong>{{ forecast.rate.per_day|round(2) }} {{ item.unit }}/Tag</strong>
+          (aus {{ forecast.rate.withdrawal_count }} Entnahmen über
+          {{ forecast.rate.observed_days|round(1) }} Tage)
+        </p>
+        {% if forecast.reach.is_unlimited %}
+          <p class="item-stock">Reichweite: unbegrenzt (Rate 0)</p>
+        {% else %}
+          <p class="item-stock">
+            Reichweite: rund <strong>{{ forecast.reach.days|round(1) }} Tage</strong>
+          </p>
+        {% endif %}
+
+        {% if forecast.suggested_reorder_level == item.reorder_level %}
+          <p class="scan-result__hint">
+            Vorschlag für den Mindestbestand: {{ forecast.suggested_reorder_level }} {{ item.unit }}
+            — entspricht dem aktuellen Wert.
+          </p>
+        {% else %}
+          <p class="item-stock">
+            Vorschlag für den Mindestbestand:
+            <strong>{{ forecast.suggested_reorder_level }} {{ item.unit }}</strong>
+            (bisher {{ item.reorder_level }} {{ item.unit }})
+          </p>
+          <form method="post" action="/artikel/{{ item.id }}/verlauf/uebernehmen" class="inline-form">
+            <button type="submit" class="button button--primary">Vorschlag übernehmen</button>
+          </form>
+        {% endif %}
+      {% else %}
+        <p class="scan-result__hint">
+          Zu wenig Daten für eine Prognose — normal, gerade bei neuen oder selten entnommenen
+          Artikeln. Ab drei Entnahmen und 14 Tagen Historie (jeweils innerhalb der letzten 90 Tage)
+          zeigt HomeKanban eine Reichweite und einen Vorschlag für den Mindestbestand.
+          {% if forecast.rate.withdrawal_count %}
+            Bisher: {{ forecast.rate.withdrawal_count }} Entnahme(n){% if forecast.rate.observed_days is not none %},
+            {{ forecast.rate.observed_days|round(1) }} Tage Historie{% endif %}.
+          {% endif %}
+        </p>
+      {% endif %}
+    </section>
+  {% endif %}
+
+  <section>
+    <h2>Vollständiges Journal</h2>
+    {% if movements %}
+      <ul class="movement-list">
+        {% for movement in movements %}
+          <li class="movement-list__item">
+            <span class="movement-list__time">{{ movement.created_at|local_time }}</span>
+            <span class="movement-list__kind">{{ movement.kind|movement_kind_label }}</span>
+            <span class="movement-list__delta">{{ "%+d"|format(movement.delta) }}</span>
+            <span class="movement-list__stock-after">→ {{ movement.stock_after }}</span>
+            {% if movement.note %}
+              <span class="movement-list__note">{{ movement.note }}</span>
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p>Noch keine Bewegungen.</p>
+    {% endif %}
+  </section>
+{% endblock %}
